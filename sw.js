@@ -1,4 +1,4 @@
-const CACHE_NAME = "my-application-v0.1.6";
+const CACHE_NAME = "my-application-v0.1.7";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -29,6 +29,21 @@ self.addEventListener("fetch", (event) => {
 
   if (requestUrl.pathname.endsWith("/config.js")) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+
+  if (
+    requestUrl.pathname.endsWith("/sw.js") ||
+    event.request.mode === "navigate" ||
+    requestUrl.pathname.endsWith("/index.html")
+  ) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      }).catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
+    );
     return;
   }
 
