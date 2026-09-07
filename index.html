@@ -153,16 +153,92 @@
         <p class="keyboard-hint"><kbd>N</kbd> 新規タスク　<kbd>/</kbd> 検索</p>
       </div>
 
-      <section id="researchPage" class="page-view blank-page" data-page-view="research" hidden aria-labelledby="researchPageTitle">
-        <div class="page-heading">
+      <section id="researchPage" class="page-view research-page" data-page-view="research" hidden aria-labelledby="researchPageTitle">
+        <div class="page-heading research-page-heading">
           <div>
             <p class="section-kicker">RESEARCH</p>
             <h1 id="researchPageTitle">研究</h1>
+            <p class="page-subtitle">予定・プラン・タスクを、研究の流れに沿ってまとめます。</p>
+          </div>
+          <div class="page-heading-actions">
+            <button id="addResearchScheduleButton" class="secondary-button" type="button">＋ 予定を追加</button>
+            <button id="addResearchPlanButton" class="primary-button" type="button"><span class="button-plus">＋</span><span>プランを追加</span></button>
           </div>
         </div>
-        <div class="blank-page-panel" aria-label="研究ページの内容">
-          <div class="blank-page-mark" aria-hidden="true">⌁</div>
+
+        <div class="research-summary-grid" aria-label="研究概要">
+          <article class="research-summary-card research-summary-card-accent">
+            <span class="summary-label">進行中のプラン</span>
+            <strong id="researchOpenPlanCount" class="summary-value">0</strong>
+            <span class="summary-caption">研究の向かう先</span>
+          </article>
+          <article class="research-summary-card">
+            <span class="summary-label">次の予定</span>
+            <strong id="researchUpcomingScheduleCount" class="summary-value">0</strong>
+            <span class="summary-caption">登録されている予定</span>
+          </article>
+          <article class="research-summary-card">
+            <span class="summary-label">未完了タスク</span>
+            <strong id="researchOpenTaskCount" class="summary-value">0</strong>
+            <span class="summary-caption">メインのTo Doと共通</span>
+          </article>
         </div>
+
+        <div id="researchDataNotice" class="research-data-notice" hidden>
+          <span class="setup-icon">i</span>
+          <span id="researchDataNoticeText"></span>
+        </div>
+
+        <div class="research-layout">
+          <section class="research-panel" aria-labelledby="researchScheduleTitle">
+            <div class="research-panel-heading">
+              <div>
+                <p class="section-kicker">SCHEDULE</p>
+                <h2 id="researchScheduleTitle">予定</h2>
+              </div>
+              <button id="addResearchScheduleInlineButton" class="small-action-button" type="button">＋ 追加</button>
+            </div>
+            <div id="researchScheduleList" class="research-item-list"></div>
+            <div id="researchScheduleEmpty" class="research-empty" hidden>
+              <span class="research-empty-mark" aria-hidden="true">◷</span>
+              <p>予定はまだありません。</p>
+              <button class="text-button" type="button" data-empty-action="schedule">最初の予定を追加</button>
+            </div>
+          </section>
+
+          <section class="research-panel" aria-labelledby="researchPlanTitle">
+            <div class="research-panel-heading">
+              <div>
+                <p class="section-kicker">PLANS</p>
+                <h2 id="researchPlanTitle">プラン</h2>
+              </div>
+              <button id="addResearchPlanInlineButton" class="small-action-button" type="button">＋ 追加</button>
+            </div>
+            <div id="researchPlanList" class="research-item-list"></div>
+            <div id="researchPlanEmpty" class="research-empty" hidden>
+              <span class="research-empty-mark" aria-hidden="true">⌁</span>
+              <p>研究プランはまだありません。</p>
+              <button class="text-button" type="button" data-empty-action="plan">最初のプランを追加</button>
+            </div>
+          </section>
+        </div>
+
+        <section class="research-panel research-tasks-panel" aria-labelledby="researchTaskTitle">
+          <div class="research-panel-heading research-tasks-heading">
+            <div>
+              <p class="section-kicker">RESEARCH TASKS</p>
+              <h2 id="researchTaskTitle">研究タスク</h2>
+              <p>ここに表示されるタスクは、メインのTo Doリストと同じデータです。</p>
+            </div>
+            <button id="addResearchTaskButton" class="secondary-button" type="button">＋ 研究タスクを追加</button>
+          </div>
+          <div id="researchTaskList" class="task-list research-task-list"></div>
+          <div id="researchTaskEmpty" class="research-empty" hidden>
+            <span class="research-empty-mark" aria-hidden="true">✓</span>
+            <p>研究タスクはまだありません。</p>
+            <button class="text-button" type="button" data-empty-action="task">研究タスクを追加</button>
+          </div>
+        </section>
       </section>
 
       <section id="creationPage" class="page-view blank-page" data-page-view="creation" hidden aria-labelledby="creationPageTitle">
@@ -232,6 +308,17 @@
             <input id="taskTags" type="text" maxlength="300" placeholder="例：研究, VGP" />
           </label>
           <label class="field-span-2">
+            研究プラン（任意）
+            <select id="taskResearchPlan">
+              <option value="">紐付けない</option>
+            </select>
+          </label>
+          <label class="toggle-field field-span-2">
+            <input id="taskIsResearch" type="checkbox" />
+            <span class="toggle-control" aria-hidden="true"></span>
+            <span>研究タスクとして研究ページに表示する</span>
+          </label>
+          <label class="field-span-2">
             メモ
             <textarea id="taskMemo" maxlength="1000" rows="3" placeholder="補足や次にやること"></textarea>
           </label>
@@ -270,6 +357,104 @@
             <span class="action-spacer"></span>
             <button id="cancelTaskButton" class="secondary-button" type="button">キャンセル</button>
             <button id="saveTaskButton" class="primary-button" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="researchPlanModal" class="modal-backdrop" hidden>
+      <section class="research-modal" role="dialog" aria-modal="true" aria-labelledby="researchPlanModalTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">RESEARCH PLAN</p>
+            <h2 id="researchPlanModalTitle">研究プランを追加</h2>
+          </div>
+          <button id="closeResearchPlanModal" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <form id="researchPlanForm" class="research-form">
+          <input id="researchPlanId" type="hidden" />
+          <label>
+            プラン名 <span class="required-mark">*</span>
+            <input id="researchPlanName" type="text" maxlength="120" required placeholder="例：VGPの性能評価を進める" />
+          </label>
+          <label>
+            状態
+            <select id="researchPlanStatus">
+              <option value="idea">構想</option>
+              <option value="active" selected>進行中</option>
+              <option value="paused">保留</option>
+              <option value="completed">完了</option>
+            </select>
+          </label>
+          <label class="field-span-2">
+            目的・向かう先
+            <textarea id="researchPlanObjective" maxlength="1200" rows="3" placeholder="このプランで明らかにしたいこと"></textarea>
+          </label>
+          <label>
+            目標日
+            <input id="researchPlanTargetDate" type="date" />
+          </label>
+          <label>
+            次にやること
+            <input id="researchPlanNextAction" type="text" maxlength="240" placeholder="例：条件Aの再現実験を行う" />
+          </label>
+          <label class="field-span-2">
+            メモ
+            <textarea id="researchPlanNotes" maxlength="1600" rows="4" placeholder="判断材料や保留事項"></textarea>
+          </label>
+          <div class="modal-actions field-span-2">
+            <button id="deleteResearchPlanButton" class="danger-button" type="button" hidden>削除</button>
+            <span class="action-spacer"></span>
+            <button id="cancelResearchPlanButton" class="secondary-button" type="button">キャンセル</button>
+            <button class="primary-button" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="researchScheduleModal" class="modal-backdrop" hidden>
+      <section class="research-modal" role="dialog" aria-modal="true" aria-labelledby="researchScheduleModalTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">RESEARCH SCHEDULE</p>
+            <h2 id="researchScheduleModalTitle">予定を追加</h2>
+          </div>
+          <button id="closeResearchScheduleModal" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <form id="researchScheduleForm" class="research-form">
+          <input id="researchScheduleId" type="hidden" />
+          <label class="field-span-2">
+            予定名 <span class="required-mark">*</span>
+            <input id="researchScheduleName" type="text" maxlength="120" required placeholder="例：VGPサンプルを測定" />
+          </label>
+          <label>
+            日時 <span class="required-mark">*</span>
+            <input id="researchScheduleAt" type="datetime-local" required />
+          </label>
+          <label>
+            種類
+            <select id="researchScheduleKind">
+              <option value="experiment" selected>実験</option>
+              <option value="meeting">打ち合わせ</option>
+              <option value="deadline">締切</option>
+              <option value="other">その他</option>
+            </select>
+          </label>
+          <label class="field-span-2">
+            紐付けるプラン（任意）
+            <select id="researchSchedulePlan">
+              <option value="">紐付けない</option>
+            </select>
+          </label>
+          <label class="field-span-2">
+            メモ
+            <textarea id="researchScheduleNotes" maxlength="1200" rows="3" placeholder="準備するもの、確認事項など"></textarea>
+          </label>
+          <div class="modal-actions field-span-2">
+            <button id="deleteResearchScheduleButton" class="danger-button" type="button" hidden>削除</button>
+            <span class="action-spacer"></span>
+            <button id="cancelResearchScheduleButton" class="secondary-button" type="button">キャンセル</button>
+            <button class="primary-button" type="submit">保存</button>
           </div>
         </form>
       </section>

@@ -1,6 +1,6 @@
 # My application v0.1
 
-個人の活動を一か所から扱うための、To Do機能の初期版です。GitHub Pagesで公開できる静的PWAとして構成しています。
+個人の活動を一か所から扱うための、To Do・研究管理機能の初期版です。GitHub Pagesで公開できる静的PWAとして構成しています。
 
 ## できること
 
@@ -12,6 +12,8 @@
 - スマートフォン・PC共通のサイドバーナビゲーション
 - スマートフォンへのPWAインストール
 - 通知日時を保存できるデータ構造
+- 研究ページでの予定・研究プラン・研究タスクの管理
+- 研究タスクとメインTo Doリストの共通管理
 
 ## 同期設定
 
@@ -20,13 +22,15 @@
 PC・スマートフォン間で同期する場合は、次の手順を行ってください。
 
 1. Supabaseで無料プロジェクトを作成する。
-2. SupabaseのSQL Editorで `supabase/schema.sql` の内容を実行する。
+2. SupabaseのSQL Editorで、最新の `supabase/schema.sql` の内容を実行する。
 3. SupabaseのProject Settings → APIから、Project URLとanon（またはpublishable）keyを確認する。
 4. `config.js` の `SUPABASE_URL` と `SUPABASE_ANON_KEY` に入力する。
 5. GitHubのリポジトリへファイルをpushする。
 6. GitHubのSettings → Pagesで、公開元を `main` ブランチのルートに設定する。
 
-`config.js`には公開用キーだけを入れてください。`service_role` keyは絶対に入れないでください。タスクの保護はSupabaseのRow Level Securityで行います。
+`config.js`には公開用キーだけを入れてください。`service_role` keyは絶対に入れないでください。タスク・研究プラン・研究予定の保護はSupabaseのRow Level Securityで行います。
+
+研究ページを同期利用する場合は、既存の `tasks` テーブルに研究連携用の列を追加し、`research_plans` と `research_schedules` テーブルを作成する必要があります。今回追加したSQLを実行すると、既存タスクを維持したまま反映できます。
 
 GitHub FreeでGitHub Pagesを使う場合、リポジトリは公開設定が必要です。タスク本文はGitHubではなく、Supabaseに保存されます。
 
@@ -45,7 +49,7 @@ python3 -m http.server 8080
 ```text
 index.html              画面構造
 styles.css              レスポンシブUI
-app.js                  To Doと認証・同期の処理
+app.js                  To Do・研究管理と認証・同期の処理
 config.js               Supabase接続設定
 manifest.webmanifest    PWA設定
 sw.js                   オフライン用キャッシュ

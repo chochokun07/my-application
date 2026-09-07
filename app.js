@@ -2,8 +2,16 @@
   "use strict";
 
   const STORAGE_KEY = "my-application.tasks.v0.1";
+  const RESEARCH_PLANS_STORAGE_KEY = "my-application.research-plans.v0.1";
+  const RESEARCH_SCHEDULES_STORAGE_KEY = "my-application.research-schedules.v0.1";
   const LOCAL_MODE_KEY = "my-application.local-mode";
   const TABLE_NAME = "tasks";
+  const RESEARCH_PLANS_TABLE = "research_plans";
+  const RESEARCH_SCHEDULES_TABLE = "research_schedules";
+  const TASK_SELECT_FIELDS = "id, title, memo, status, due_date, priority, tags, is_research, research_plan_id, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
+  const LEGACY_TASK_SELECT_FIELDS = "id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
+  const PLAN_SELECT_FIELDS = "id, title, objective, status, target_date, next_action, notes, created_at, updated_at";
+  const SCHEDULE_SELECT_FIELDS = "id, title, scheduled_at, kind, plan_id, notes, created_at, updated_at";
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
   const PAGE_VIEWS = new Set(["home", "todo", "research", "creation"]);
@@ -22,11 +30,19 @@
     mode: supabaseClient ? "remote" : "local",
     user: null,
     tasks: [],
+    plans: [],
+    schedules: [],
     view: "today",
     sidebarView: getPageViewFromLocation(),
     search: "",
     authMode: "login",
     editingTaskId: null,
+    editingPlanId: null,
+    editingScheduleId: null,
+    researchTaskContext: false,
+    researchRemoteAvailable: true,
+    researchTaskSchemaAvailable: true,
+    researchDataError: "",
     toastTimer: null,
   };
 
@@ -36,6 +52,17 @@
     todoPage: $("todoPage"),
     researchPage: $("researchPage"),
     creationPage: $("creationPage"),
+    researchDataNotice: $("researchDataNotice"),
+    researchDataNoticeText: $("researchDataNoticeText"),
+    researchOpenPlanCount: $("researchOpenPlanCount"),
+    researchUpcomingScheduleCount: $("researchUpcomingScheduleCount"),
+    researchOpenTaskCount: $("researchOpenTaskCount"),
+    researchScheduleList: $("researchScheduleList"),
+    researchScheduleEmpty: $("researchScheduleEmpty"),
+    researchPlanList: $("researchPlanList"),
+    researchPlanEmpty: $("researchPlanEmpty"),
+    researchTaskList: $("researchTaskList"),
+    researchTaskEmpty: $("researchTaskEmpty"),
     authShell: $("authShell"),
     setupNotice: $("setupNotice"),
     syncStatus: $("syncStatus"),
@@ -77,6 +104,8 @@
     taskReminderAt: $("taskReminderAt"),
     taskReminderEnabled: $("taskReminderEnabled"),
     taskTags: $("taskTags"),
+    taskResearchPlan: $("taskResearchPlan"),
+    taskIsResearch: $("taskIsResearch"),
     deleteTaskButton: $("deleteTaskButton"),
     closeTaskModal: $("closeTaskModal"),
     cancelTaskButton: $("cancelTaskButton"),
@@ -90,6 +119,36 @@
     todayTabCount: $("todayTabCount"),
     allTabCount: $("allTabCount"),
     completedTabCount: $("completedTabCount"),
+    addResearchPlanButton: $("addResearchPlanButton"),
+    addResearchPlanInlineButton: $("addResearchPlanInlineButton"),
+    addResearchScheduleButton: $("addResearchScheduleButton"),
+    addResearchScheduleInlineButton: $("addResearchScheduleInlineButton"),
+    addResearchTaskButton: $("addResearchTaskButton"),
+    researchPlanModal: $("researchPlanModal"),
+    researchPlanModalTitle: $("researchPlanModalTitle"),
+    researchPlanForm: $("researchPlanForm"),
+    researchPlanId: $("researchPlanId"),
+    researchPlanName: $("researchPlanName"),
+    researchPlanObjective: $("researchPlanObjective"),
+    researchPlanStatus: $("researchPlanStatus"),
+    researchPlanTargetDate: $("researchPlanTargetDate"),
+    researchPlanNextAction: $("researchPlanNextAction"),
+    researchPlanNotes: $("researchPlanNotes"),
+    closeResearchPlanModal: $("closeResearchPlanModal"),
+    cancelResearchPlanButton: $("cancelResearchPlanButton"),
+    deleteResearchPlanButton: $("deleteResearchPlanButton"),
+    researchScheduleModal: $("researchScheduleModal"),
+    researchScheduleModalTitle: $("researchScheduleModalTitle"),
+    researchScheduleForm: $("researchScheduleForm"),
+    researchScheduleId: $("researchScheduleId"),
+    researchScheduleName: $("researchScheduleName"),
+    researchScheduleAt: $("researchScheduleAt"),
+    researchScheduleKind: $("researchScheduleKind"),
+    researchSchedulePlan: $("researchSchedulePlan"),
+    researchScheduleNotes: $("researchScheduleNotes"),
+    closeResearchScheduleModal: $("closeResearchScheduleModal"),
+    cancelResearchScheduleButton: $("cancelResearchScheduleButton"),
+    deleteResearchScheduleButton: $("deleteResearchScheduleButton"),
   };
 
   const STATUS_LABELS = {
@@ -105,7 +164,22 @@
     high: "優先度 高",
   };
 
+  const PLAN_STATUS_LABELS = {
+    idea: "構想",
+    active: "進行中",
+    paused: "保留",
+    completed: "完了",
+  };
+
+  const SCHEDULE_KIND_LABELS = {
+    experiment: "実験",
+    meeting: "打ち合わせ",
+    deadline: "締切",
+    other: "その他",
+  };
+
   const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+  const PLAN_STATUS_RANK = { active: 0, idea: 1, paused: 2, completed: 3 };
   const dateFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
   const dateTimeFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -137,6 +211,8 @@
       title: String(task.title || "").trim(),
       memo: String(task.memo ?? ""),
       tags: normalizeTags(task.tags),
+      isResearch: Boolean(task.is_research ?? task.isResearch ?? task.research_plan_id ?? task.researchPlanId),
+      researchPlanId: task.research_plan_id ?? task.researchPlanId ?? "",
       status: STATUS_LABELS[task.status] ? task.status : "todo",
       dueDate: task.due_date ?? task.dueDate ?? "",
       priority: PRIORITY_LABELS[task.priority] ? task.priority : "medium",
@@ -149,16 +225,73 @@
   }
 
   function toDatabasePayload(task) {
-    return {
+    const payload = {
       title: task.title,
       memo: task.memo || null,
       tags: task.tags,
+      is_research: Boolean(task.isResearch),
+      research_plan_id: task.researchPlanId || null,
       status: task.status,
       due_date: task.dueDate || null,
       priority: task.priority,
       completed_at: task.completedAt || null,
       reminder_at: task.reminderAt ? new Date(task.reminderAt).toISOString() : null,
       reminder_enabled: Boolean(task.reminderEnabled),
+      user_id: state.user.id,
+    };
+    if (!state.researchTaskSchemaAvailable) {
+      delete payload.is_research;
+      delete payload.research_plan_id;
+    }
+    return payload;
+  }
+
+  function normalizePlan(plan = {}) {
+    return {
+      id: plan.id || createId(),
+      title: String(plan.title || "").trim(),
+      objective: String(plan.objective ?? ""),
+      status: PLAN_STATUS_LABELS[plan.status] ? plan.status : "active",
+      targetDate: plan.target_date ?? plan.targetDate ?? "",
+      nextAction: String(plan.next_action ?? plan.nextAction ?? ""),
+      notes: String(plan.notes ?? ""),
+      createdAt: plan.created_at ?? plan.createdAt ?? new Date().toISOString(),
+      updatedAt: plan.updated_at ?? plan.updatedAt ?? new Date().toISOString(),
+    };
+  }
+
+  function normalizeSchedule(schedule = {}) {
+    return {
+      id: schedule.id || createId(),
+      title: String(schedule.title || "").trim(),
+      scheduledAt: schedule.scheduled_at ?? schedule.scheduledAt ?? "",
+      kind: SCHEDULE_KIND_LABELS[schedule.kind] ? schedule.kind : "other",
+      planId: schedule.plan_id ?? schedule.planId ?? "",
+      notes: String(schedule.notes ?? ""),
+      createdAt: schedule.created_at ?? schedule.createdAt ?? new Date().toISOString(),
+      updatedAt: schedule.updated_at ?? schedule.updatedAt ?? new Date().toISOString(),
+    };
+  }
+
+  function toPlanDatabasePayload(plan) {
+    return {
+      title: plan.title,
+      objective: plan.objective || null,
+      status: plan.status,
+      target_date: plan.targetDate || null,
+      next_action: plan.nextAction || null,
+      notes: plan.notes || null,
+      user_id: state.user.id,
+    };
+  }
+
+  function toScheduleDatabasePayload(schedule) {
+    return {
+      title: schedule.title,
+      scheduled_at: schedule.scheduledAt ? new Date(schedule.scheduledAt).toISOString() : null,
+      kind: schedule.kind,
+      plan_id: schedule.planId || null,
+      notes: schedule.notes || null,
       user_id: state.user.id,
     };
   }
@@ -175,6 +308,21 @@
 
   function writeLocalTasks() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+  }
+
+  function readLocalCollection(storageKey, normalizer) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      return Array.isArray(saved) ? saved.map(normalizer).filter((item) => item.title) : [];
+    } catch (error) {
+      console.warn("ローカル研究データの読み込みに失敗しました", error);
+      return [];
+    }
+  }
+
+  function writeLocalResearchData() {
+    localStorage.setItem(RESEARCH_PLANS_STORAGE_KEY, JSON.stringify(state.plans));
+    localStorage.setItem(RESEARCH_SCHEDULES_STORAGE_KEY, JSON.stringify(state.schedules));
   }
 
   function setSyncStatus(label, status) {
@@ -295,6 +443,41 @@
     return dateTimeFormatter.format(date);
   }
 
+  function formatScheduleDateTime(value) {
+    if (!value) return "日時未定";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "日時不明";
+    return new Intl.DateTimeFormat("ja-JP", {
+      month: "numeric",
+      day: "numeric",
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  function formatTargetDate(value) {
+    return value ? formatDateOnly(value) : "目標日なし";
+  }
+
+  function getPlanById(planId) {
+    return state.plans.find((plan) => plan.id === planId) || null;
+  }
+
+  function isMissingResearchColumn(error) {
+    const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+    return message.includes("research_plan_id") || message.includes("is_research");
+  }
+
+  function isMissingResearchTable(error) {
+    const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+    return message.includes("research_plans") || message.includes("research_schedules");
+  }
+
+  function researchSetupMessage() {
+    return "研究データを同期するには、最新のsupabase/schema.sqlをSupabaseのSQL Editorで実行してください。";
+  }
+
   function isOverdue(task) {
     return Boolean(task.dueDate && task.status !== "completed" && task.dueDate < todayKey());
   }
@@ -332,8 +515,15 @@
   function renderTask(task) {
     const statusLabel = STATUS_LABELS[task.status];
     const dueClass = isOverdue(task) ? " is-overdue" : "";
+    const researchPlan = getPlanById(task.researchPlanId);
     const reminder = task.reminderEnabled && task.reminderAt
       ? `<span class="task-meta-item">♧ ${escapeHtml(formatDateTime(task.reminderAt))}</span>`
+      : "";
+    const researchMark = task.isResearch
+      ? `<span class="task-meta-item research-task-mark">⌁ 研究</span>`
+      : "";
+    const researchPlanMark = researchPlan
+      ? `<span class="task-meta-item research-plan-mark">↳ ${escapeHtml(researchPlan.title)}</span>`
       : "";
     const memo = task.memo ? `<p class="task-memo">${escapeHtml(task.memo)}</p>` : "";
     const tags = task.tags.length
@@ -353,6 +543,8 @@
           <div class="task-meta">
             <span class="task-meta-item${dueClass}">${task.dueDate ? "◷" : "○"} ${escapeHtml(task.dueDate ? formatDateOnly(task.dueDate) : "期限なし")}</span>
             <span class="priority-chip priority-${escapeHtml(task.priority)}">${escapeHtml(PRIORITY_LABELS[task.priority])}</span>
+            ${researchMark}
+            ${researchPlanMark}
             ${reminder}
           </div>
           ${tags}
@@ -364,6 +556,117 @@
         </div>
       </article>
     `;
+  }
+
+  function renderResearchPlan(plan) {
+    const planTasks = state.tasks.filter((task) => task.researchPlanId === plan.id);
+    const openTaskCount = planTasks.filter((task) => task.status !== "completed").length;
+    const objective = plan.objective || "目的はまだ記録されていません。";
+    const nextAction = plan.nextAction || "次にやることは未設定です。";
+
+    return `
+      <article class="research-plan-item" data-plan-id="${escapeHtml(plan.id)}">
+        <div class="research-item-body">
+          <div class="research-item-title-row">
+            <h3>${escapeHtml(plan.title)}</h3>
+            <span class="status-chip research-status-${escapeHtml(plan.status)}">${escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
+          </div>
+          <p class="research-item-description">${escapeHtml(objective)}</p>
+          <p class="research-next-action"><span>次にやること</span>${escapeHtml(nextAction)}</p>
+          <div class="research-item-meta">
+            <span>${escapeHtml(formatTargetDate(plan.targetDate))}</span>
+            <span>未完了タスク ${openTaskCount}件</span>
+          </div>
+        </div>
+        <div class="research-item-actions">
+          <button class="task-action" type="button" data-research-action="edit-plan">編集</button>
+          <button class="task-action delete" type="button" data-research-action="delete-plan">削除</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderResearchSchedule(schedule) {
+    const plan = getPlanById(schedule.planId);
+    const notes = schedule.notes ? `<p class="research-item-description">${escapeHtml(schedule.notes)}</p>` : "";
+    const planLabel = plan ? `<span class="research-linked-plan">⌁ ${escapeHtml(plan.title)}</span>` : "";
+    return `
+      <article class="research-schedule-item" data-schedule-id="${escapeHtml(schedule.id)}">
+        <time class="research-schedule-date" datetime="${escapeHtml(schedule.scheduledAt)}">
+          <strong>${escapeHtml(formatScheduleDateTime(schedule.scheduledAt))}</strong>
+          <span>${escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind])}</span>
+        </time>
+        <div class="research-item-body">
+          <div class="research-item-title-row">
+            <h3>${escapeHtml(schedule.title)}</h3>
+            ${planLabel}
+          </div>
+          ${notes}
+        </div>
+        <div class="research-item-actions">
+          <button class="task-action" type="button" data-research-action="edit-schedule">編集</button>
+          <button class="task-action delete" type="button" data-research-action="delete-schedule">削除</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderResearch() {
+    const openPlans = state.plans.filter((plan) => plan.status !== "completed");
+    const now = Date.now();
+    const upcomingSchedules = state.schedules.filter((schedule) => {
+      const timestamp = new Date(schedule.scheduledAt).getTime();
+      return Number.isFinite(timestamp) && timestamp >= now;
+    });
+    const researchTasks = state.tasks
+      .filter((task) => task.isResearch || task.researchPlanId)
+      .sort((a, b) => {
+        if (a.status === "completed" && b.status !== "completed") return 1;
+        if (b.status === "completed" && a.status !== "completed") return -1;
+        return (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31");
+      });
+    const sortedSchedules = [...state.schedules].sort((a, b) => {
+      const timeA = new Date(a.scheduledAt).getTime();
+      const timeB = new Date(b.scheduledAt).getTime();
+      const upcomingA = Number.isFinite(timeA) && timeA >= now;
+      const upcomingB = Number.isFinite(timeB) && timeB >= now;
+      if (upcomingA !== upcomingB) return upcomingA ? -1 : 1;
+      if (!upcomingA && !upcomingB) {
+        return (Number.isFinite(timeB) ? timeB : Number.NEGATIVE_INFINITY)
+          - (Number.isFinite(timeA) ? timeA : Number.NEGATIVE_INFINITY);
+      }
+      return (Number.isFinite(timeA) ? timeA : Number.MAX_SAFE_INTEGER)
+        - (Number.isFinite(timeB) ? timeB : Number.MAX_SAFE_INTEGER);
+    });
+    const sortedPlans = [...state.plans].sort((a, b) => {
+      const statusDifference = (PLAN_STATUS_RANK[a.status] ?? 1) - (PLAN_STATUS_RANK[b.status] ?? 1);
+      if (statusDifference !== 0) return statusDifference;
+      return (a.targetDate || "9999-12-31").localeCompare(b.targetDate || "9999-12-31");
+    });
+
+    elements.researchOpenPlanCount.textContent = String(openPlans.length);
+    elements.researchUpcomingScheduleCount.textContent = String(upcomingSchedules.length);
+    elements.researchOpenTaskCount.textContent = String(researchTasks.filter((task) => task.status !== "completed").length);
+
+    const noticeMessages = [];
+    if (state.mode === "remote" && !state.researchRemoteAvailable) noticeMessages.push(researchSetupMessage());
+    if (state.mode === "remote" && !state.researchTaskSchemaAvailable) {
+      noticeMessages.push("既存タスクとの研究連携には、最新のsupabase/schema.sqlの実行が必要です。");
+    }
+    elements.researchDataNotice.hidden = noticeMessages.length === 0;
+    elements.researchDataNoticeText.textContent = noticeMessages.join(" ");
+
+    elements.researchScheduleList.innerHTML = sortedSchedules.map(renderResearchSchedule).join("");
+    elements.researchScheduleList.hidden = sortedSchedules.length === 0;
+    elements.researchScheduleEmpty.hidden = sortedSchedules.length !== 0;
+
+    elements.researchPlanList.innerHTML = sortedPlans.map(renderResearchPlan).join("");
+    elements.researchPlanList.hidden = sortedPlans.length === 0;
+    elements.researchPlanEmpty.hidden = sortedPlans.length !== 0;
+
+    elements.researchTaskList.innerHTML = researchTasks.map(renderTask).join("");
+    elements.researchTaskList.hidden = researchTasks.length === 0;
+    elements.researchTaskEmpty.hidden = researchTasks.length !== 0;
   }
 
   function render() {
@@ -398,6 +701,7 @@
     elements.taskList.innerHTML = visibleTasks.map(renderTask).join("");
     elements.taskList.hidden = visibleTasks.length === 0;
     elements.emptyState.hidden = visibleTasks.length !== 0;
+    renderResearch();
 
     if (state.search.trim()) {
       elements.emptyTitle.textContent = "該当するタスクがありません";
@@ -416,20 +720,72 @@
 
   async function loadRemoteTasks() {
     setSyncStatus("同期中", "connecting");
-    const { data, error } = await supabaseClient
+    const fetchTasks = (selectFields) => supabaseClient
       .from(TABLE_NAME)
-      .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
+      .select(selectFields)
       .order("created_at", { ascending: false });
-    if (error) throw error;
-    state.tasks = (data || []).map(normalizeTask);
+    let result = await fetchTasks(state.researchTaskSchemaAvailable ? TASK_SELECT_FIELDS : LEGACY_TASK_SELECT_FIELDS);
+    if (result.error && state.researchTaskSchemaAvailable && isMissingResearchColumn(result.error)) {
+      state.researchTaskSchemaAvailable = false;
+      result = await fetchTasks(LEGACY_TASK_SELECT_FIELDS);
+    }
+    if (result.error) throw result.error;
+    state.tasks = (result.data || []).map(normalizeTask);
     setSyncStatus("同期済み", "synced");
     render();
+  }
+
+  async function loadRemoteResearchData() {
+    try {
+      const [plansResult, schedulesResult] = await Promise.all([
+        supabaseClient
+          .from(RESEARCH_PLANS_TABLE)
+          .select(PLAN_SELECT_FIELDS)
+          .order("updated_at", { ascending: false }),
+        supabaseClient
+          .from(RESEARCH_SCHEDULES_TABLE)
+          .select(SCHEDULE_SELECT_FIELDS)
+          .order("scheduled_at", { ascending: true }),
+      ]);
+      if (plansResult.error) throw plansResult.error;
+      if (schedulesResult.error) throw schedulesResult.error;
+      state.plans = (plansResult.data || []).map(normalizePlan);
+      state.schedules = (schedulesResult.data || []).map(normalizeSchedule);
+      state.researchRemoteAvailable = true;
+      state.researchDataError = "";
+    } catch (error) {
+      if (!isMissingResearchTable(error)) throw error;
+      state.plans = [];
+      state.schedules = [];
+      state.researchRemoteAvailable = false;
+      state.researchDataError = researchSetupMessage();
+    }
+    render();
+  }
+
+  async function runRemoteTaskMutation(task, operation) {
+    const execute = () => {
+      const query = operation === "update"
+        ? supabaseClient.from(TABLE_NAME).update(toDatabasePayload(task)).eq("id", task.id)
+        : supabaseClient.from(TABLE_NAME).insert(toDatabasePayload(task));
+      return query.select(state.researchTaskSchemaAvailable ? TASK_SELECT_FIELDS : LEGACY_TASK_SELECT_FIELDS).single();
+    };
+    let result = await execute();
+    if (result.error && state.researchTaskSchemaAvailable && isMissingResearchColumn(result.error)) {
+      state.researchTaskSchemaAvailable = false;
+      if (task.isResearch || task.researchPlanId) throw new Error(researchSetupMessage());
+      result = await execute();
+    }
+    if (result.error) throw result.error;
+    return result.data;
   }
 
   async function handleSession(session) {
     state.user = session?.user || null;
     if (!state.user) {
       state.tasks = [];
+      state.plans = [];
+      state.schedules = [];
       setSyncStatus("ログイン待ち", "local");
       showAuth();
       return;
@@ -439,7 +795,7 @@
     elements.accountInitial.textContent = (state.user.email || "M").slice(0, 1).toUpperCase();
     elements.accountEmail.textContent = state.user.email || "ログイン中";
     elements.accountButton.hidden = false;
-    await loadRemoteTasks();
+    await Promise.all([loadRemoteTasks(), loadRemoteResearchData()]);
     showApp();
   }
 
@@ -476,6 +832,7 @@
   function getTaskFromForm() {
     const existing = state.tasks.find((task) => task.id === state.editingTaskId);
     const status = elements.taskStatus.value;
+    const researchPlanId = elements.taskResearchPlan.value || "";
     const completedAt = status === "completed"
       ? existing?.completedAt || new Date().toISOString()
       : null;
@@ -484,6 +841,8 @@
       title: elements.taskTitle.value.trim(),
       memo: elements.taskMemo.value.trim(),
       tags: normalizeTags(elements.taskTags.value),
+      isResearch: elements.taskIsResearch.checked || Boolean(researchPlanId),
+      researchPlanId,
       dueDate: elements.taskDueDate.value || "",
       priority: elements.taskPriority.value,
       status,
@@ -511,23 +870,12 @@
         writeLocalTasks();
         setSyncStatus("この端末のみ", "local");
       } else if (state.editingTaskId) {
-        const { data, error } = await supabaseClient
-          .from(TABLE_NAME)
-          .update(toDatabasePayload(task))
-          .eq("id", task.id)
-          .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
-          .single();
-        if (error) throw error;
+        const data = await runRemoteTaskMutation(task, "update");
         const index = state.tasks.findIndex((item) => item.id === task.id);
         if (index >= 0) state.tasks[index] = normalizeTask(data);
         setSyncStatus("同期済み", "synced");
       } else {
-        const { data, error } = await supabaseClient
-          .from(TABLE_NAME)
-          .insert(toDatabasePayload(task))
-          .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
-          .single();
-        if (error) throw error;
+        const data = await runRemoteTaskMutation(task, "insert");
         state.tasks.unshift(normalizeTask(data));
         setSyncStatus("同期済み", "synced");
       }
@@ -558,13 +906,7 @@
         writeLocalTasks();
         setSyncStatus("この端末のみ", "local");
       } else {
-        const { data, error } = await supabaseClient
-          .from(TABLE_NAME)
-          .update(toDatabasePayload(updated))
-          .eq("id", taskId)
-          .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
-          .single();
-        if (error) throw error;
+        const data = await runRemoteTaskMutation(updated, "update");
         state.tasks = state.tasks.map((item) => item.id === taskId ? normalizeTask(data) : item);
         setSyncStatus("同期済み", "synced");
       }
@@ -600,14 +942,243 @@
     }
   }
 
-  function openTaskModal(task = null) {
+  function updateResearchPlanSelectors() {
+    [elements.taskResearchPlan, elements.researchSchedulePlan].forEach((select) => {
+      const selectedId = select.value;
+      select.innerHTML = "";
+      const noPlanOption = document.createElement("option");
+      noPlanOption.value = "";
+      noPlanOption.textContent = "紐付けない";
+      select.append(noPlanOption);
+      [...state.plans]
+        .sort((a, b) => a.title.localeCompare(b.title, "ja-JP"))
+        .forEach((plan) => {
+          const option = document.createElement("option");
+          option.value = plan.id;
+          option.textContent = plan.title;
+          select.append(option);
+        });
+      select.value = state.plans.some((plan) => plan.id === selectedId) ? selectedId : "";
+    });
+  }
+
+  function getResearchPlanFromForm() {
+    const existing = state.plans.find((plan) => plan.id === state.editingPlanId);
+    return normalizePlan({
+      id: state.editingPlanId || createId(),
+      title: elements.researchPlanName.value.trim(),
+      objective: elements.researchPlanObjective.value.trim(),
+      status: elements.researchPlanStatus.value,
+      targetDate: elements.researchPlanTargetDate.value || "",
+      nextAction: elements.researchPlanNextAction.value.trim(),
+      notes: elements.researchPlanNotes.value.trim(),
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function saveResearchPlan(event) {
+    event.preventDefault();
+    if (!elements.researchPlanForm.reportValidity()) return;
+    const plan = getResearchPlanFromForm();
+    const isEditing = Boolean(state.editingPlanId);
+    const saveButton = elements.researchPlanForm.querySelector("button[type=submit]");
+    saveButton.disabled = true;
+
+    try {
+      if (state.mode === "local") {
+        const index = state.plans.findIndex((item) => item.id === plan.id);
+        if (index >= 0) state.plans[index] = plan;
+        else state.plans.unshift(plan);
+        writeLocalResearchData();
+      } else {
+        if (!state.researchRemoteAvailable) throw new Error(researchSetupMessage());
+        const result = isEditing
+          ? await supabaseClient.from(RESEARCH_PLANS_TABLE).update(toPlanDatabasePayload(plan)).eq("id", plan.id).select(PLAN_SELECT_FIELDS).single()
+          : await supabaseClient.from(RESEARCH_PLANS_TABLE).insert(toPlanDatabasePayload(plan)).select(PLAN_SELECT_FIELDS).single();
+        if (result.error) throw result.error;
+        const savedPlan = normalizePlan(result.data);
+        if (isEditing) {
+          const index = state.plans.findIndex((item) => item.id === plan.id);
+          if (index >= 0) state.plans[index] = savedPlan;
+        } else {
+          state.plans.unshift(savedPlan);
+        }
+      }
+      closeResearchPlanModal();
+      updateResearchPlanSelectors();
+      render();
+      showToast(isEditing ? "研究プランを更新しました" : "研究プランを追加しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    } finally {
+      saveButton.disabled = false;
+    }
+  }
+
+  function openResearchPlanModal(plan = null) {
+    state.editingPlanId = plan?.id || null;
+    elements.researchPlanModalTitle.textContent = plan ? "研究プランを編集" : "研究プランを追加";
+    elements.deleteResearchPlanButton.hidden = !plan;
+    elements.researchPlanId.value = plan?.id || "";
+    elements.researchPlanName.value = plan?.title || "";
+    elements.researchPlanObjective.value = plan?.objective || "";
+    elements.researchPlanStatus.value = plan?.status || "active";
+    elements.researchPlanTargetDate.value = plan?.targetDate || "";
+    elements.researchPlanNextAction.value = plan?.nextAction || "";
+    elements.researchPlanNotes.value = plan?.notes || "";
+    elements.researchPlanModal.hidden = false;
+    document.body.classList.add("modal-open");
+    window.setTimeout(() => elements.researchPlanName.focus(), 40);
+  }
+
+  function closeResearchPlanModal() {
+    elements.researchPlanModal.hidden = true;
+    document.body.classList.remove("modal-open");
+    state.editingPlanId = null;
+    elements.researchPlanForm.reset();
+  }
+
+  async function deleteResearchPlan(planId, askForConfirmation = true) {
+    const plan = state.plans.find((item) => item.id === planId);
+    if (!plan) return;
+    if (askForConfirmation && !window.confirm(`「${plan.title}」を削除しますか？`)) return;
+
+    try {
+      if (state.mode === "local") {
+        state.plans = state.plans.filter((item) => item.id !== planId);
+        state.schedules = state.schedules.map((schedule) => schedule.planId === planId ? { ...schedule, planId: "" } : schedule);
+        state.tasks = state.tasks.map((task) => task.researchPlanId === planId ? { ...task, researchPlanId: "" } : task);
+        writeLocalResearchData();
+        writeLocalTasks();
+      } else {
+        if (!state.researchRemoteAvailable) throw new Error(researchSetupMessage());
+        const { error } = await supabaseClient.from(RESEARCH_PLANS_TABLE).delete().eq("id", planId);
+        if (error) throw error;
+        state.plans = state.plans.filter((item) => item.id !== planId);
+        state.schedules = state.schedules.map((schedule) => schedule.planId === planId ? { ...schedule, planId: "" } : schedule);
+        state.tasks = state.tasks.map((task) => task.researchPlanId === planId ? { ...task, researchPlanId: "" } : task);
+      }
+      closeResearchPlanModal();
+      updateResearchPlanSelectors();
+      render();
+      showToast("研究プランを削除しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    }
+  }
+
+  function getResearchScheduleFromForm() {
+    const existing = state.schedules.find((schedule) => schedule.id === state.editingScheduleId);
+    const date = new Date(elements.researchScheduleAt.value);
+    return normalizeSchedule({
+      id: state.editingScheduleId || createId(),
+      title: elements.researchScheduleName.value.trim(),
+      scheduledAt: Number.isNaN(date.getTime()) ? "" : date.toISOString(),
+      kind: elements.researchScheduleKind.value,
+      planId: elements.researchSchedulePlan.value || "",
+      notes: elements.researchScheduleNotes.value.trim(),
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function saveResearchSchedule(event) {
+    event.preventDefault();
+    if (!elements.researchScheduleForm.reportValidity()) return;
+    const schedule = getResearchScheduleFromForm();
+    const isEditing = Boolean(state.editingScheduleId);
+    const saveButton = elements.researchScheduleForm.querySelector("button[type=submit]");
+    saveButton.disabled = true;
+
+    try {
+      if (state.mode === "local") {
+        const index = state.schedules.findIndex((item) => item.id === schedule.id);
+        if (index >= 0) state.schedules[index] = schedule;
+        else state.schedules.push(schedule);
+        writeLocalResearchData();
+      } else {
+        if (!state.researchRemoteAvailable) throw new Error(researchSetupMessage());
+        const result = isEditing
+          ? await supabaseClient.from(RESEARCH_SCHEDULES_TABLE).update(toScheduleDatabasePayload(schedule)).eq("id", schedule.id).select(SCHEDULE_SELECT_FIELDS).single()
+          : await supabaseClient.from(RESEARCH_SCHEDULES_TABLE).insert(toScheduleDatabasePayload(schedule)).select(SCHEDULE_SELECT_FIELDS).single();
+        if (result.error) throw result.error;
+        const savedSchedule = normalizeSchedule(result.data);
+        if (isEditing) {
+          const index = state.schedules.findIndex((item) => item.id === schedule.id);
+          if (index >= 0) state.schedules[index] = savedSchedule;
+        } else {
+          state.schedules.push(savedSchedule);
+        }
+      }
+      closeResearchScheduleModal();
+      render();
+      showToast(isEditing ? "予定を更新しました" : "予定を追加しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    } finally {
+      saveButton.disabled = false;
+    }
+  }
+
+  function openResearchScheduleModal(schedule = null) {
+    state.editingScheduleId = schedule?.id || null;
+    elements.researchScheduleModalTitle.textContent = schedule ? "予定を編集" : "予定を追加";
+    elements.deleteResearchScheduleButton.hidden = !schedule;
+    elements.researchScheduleId.value = schedule?.id || "";
+    elements.researchScheduleName.value = schedule?.title || "";
+    elements.researchScheduleAt.value = toDateTimeLocalValue(schedule?.scheduledAt || "");
+    elements.researchScheduleKind.value = schedule?.kind || "experiment";
+    updateResearchPlanSelectors();
+    elements.researchSchedulePlan.value = schedule?.planId || "";
+    elements.researchScheduleNotes.value = schedule?.notes || "";
+    elements.researchScheduleModal.hidden = false;
+    document.body.classList.add("modal-open");
+    window.setTimeout(() => elements.researchScheduleName.focus(), 40);
+  }
+
+  function closeResearchScheduleModal() {
+    elements.researchScheduleModal.hidden = true;
+    document.body.classList.remove("modal-open");
+    state.editingScheduleId = null;
+    elements.researchScheduleForm.reset();
+  }
+
+  async function deleteResearchSchedule(scheduleId, askForConfirmation = true) {
+    const schedule = state.schedules.find((item) => item.id === scheduleId);
+    if (!schedule) return;
+    if (askForConfirmation && !window.confirm(`「${schedule.title}」を削除しますか？`)) return;
+
+    try {
+      if (state.mode === "local") {
+        state.schedules = state.schedules.filter((item) => item.id !== scheduleId);
+        writeLocalResearchData();
+      } else {
+        if (!state.researchRemoteAvailable) throw new Error(researchSetupMessage());
+        const { error } = await supabaseClient.from(RESEARCH_SCHEDULES_TABLE).delete().eq("id", scheduleId);
+        if (error) throw error;
+        state.schedules = state.schedules.filter((item) => item.id !== scheduleId);
+      }
+      closeResearchScheduleModal();
+      render();
+      showToast("予定を削除しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    }
+  }
+
+  function openTaskModal(task = null, options = {}) {
     state.editingTaskId = task?.id || null;
+    state.researchTaskContext = Boolean(options.researchContext);
     elements.taskModalTitle.textContent = task ? "タスクを編集" : "タスクを追加";
     elements.deleteTaskButton.hidden = !task;
     elements.taskId.value = task?.id || "";
     elements.taskTitle.value = task?.title || "";
     elements.taskMemo.value = task?.memo || "";
     elements.taskTags.value = task?.tags?.join(", ") || "";
+    updateResearchPlanSelectors();
+    elements.taskResearchPlan.value = task?.researchPlanId || "";
+    elements.taskIsResearch.checked = task ? Boolean(task.isResearch || task.researchPlanId) : state.researchTaskContext;
     elements.taskDueDate.value = task?.dueDate || "";
     elements.taskPriority.value = task?.priority || "medium";
     elements.taskStatus.value = task?.status || "todo";
@@ -622,6 +1193,7 @@
     elements.taskModal.hidden = true;
     document.body.classList.remove("modal-open");
     state.editingTaskId = null;
+    state.researchTaskContext = false;
     elements.taskForm.reset();
   }
 
@@ -637,6 +1209,7 @@
     const message = String(error?.message || error || "");
     if (message.includes("Invalid login credentials")) return "メールアドレスまたはパスワードが正しくありません。";
     if (message.includes("User already registered")) return "このメールアドレスはすでに登録されています。";
+    if (message.includes("research_plans") || message.includes("research_schedules") || message.includes("research_plan_id") || message.includes("is_research")) return researchSetupMessage();
     if (message.includes("relation") && message.includes("does not exist")) return "Supabaseにtasksテーブルがありません。READMEのSQLを実行してください。";
     if (message.includes("Failed to fetch")) return "通信に失敗しました。接続を確認してください。";
     return message || "処理に失敗しました。";
@@ -646,6 +1219,11 @@
     state.mode = "local";
     state.user = null;
     state.tasks = readLocalTasks();
+    state.plans = readLocalCollection(RESEARCH_PLANS_STORAGE_KEY, normalizePlan);
+    state.schedules = readLocalCollection(RESEARCH_SCHEDULES_STORAGE_KEY, normalizeSchedule);
+    state.researchRemoteAvailable = true;
+    state.researchTaskSchemaAvailable = true;
+    state.researchDataError = "";
     localStorage.setItem(LOCAL_MODE_KEY, "true");
     elements.accountButton.hidden = true;
     elements.openAuthButton.hidden = !supabaseClient;
@@ -665,6 +1243,45 @@
     showAuth();
   }
 
+  function handleTaskListClick(event) {
+    const target = event.target.closest("[data-action]");
+    const card = event.target.closest("[data-task-id]");
+    if (!target || !card) return;
+    const taskId = card.dataset.taskId;
+    const task = state.tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    if (target.dataset.action === "toggle") toggleTask(taskId);
+    if (target.dataset.action === "edit") openTaskModal(task);
+    if (target.dataset.action === "delete") deleteTask(taskId);
+  }
+
+  function handleTaskListKeydown(event) {
+    const target = event.target.closest('[data-action="edit"]');
+    if (target && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      const card = target.closest("[data-task-id]");
+      const task = state.tasks.find((item) => item.id === card?.dataset.taskId);
+      if (task) openTaskModal(task);
+    }
+  }
+
+  function handleResearchPageClick(event) {
+    const emptyAction = event.target.closest("[data-empty-action]")?.dataset.emptyAction;
+    if (emptyAction === "plan") return openResearchPlanModal();
+    if (emptyAction === "schedule") return openResearchScheduleModal();
+    if (emptyAction === "task") return openTaskModal(null, { researchContext: true });
+
+    const target = event.target.closest("[data-research-action]");
+    if (!target) return;
+    const action = target.dataset.researchAction;
+    const planCard = target.closest("[data-plan-id]");
+    const scheduleCard = target.closest("[data-schedule-id]");
+    if (action === "edit-plan" && planCard) openResearchPlanModal(state.plans.find((plan) => plan.id === planCard.dataset.planId));
+    if (action === "delete-plan" && planCard) deleteResearchPlan(planCard.dataset.planId);
+    if (action === "edit-schedule" && scheduleCard) openResearchScheduleModal(state.schedules.find((schedule) => schedule.id === scheduleCard.dataset.scheduleId));
+    if (action === "delete-schedule" && scheduleCard) deleteResearchSchedule(scheduleCard.dataset.scheduleId);
+  }
+
   function bindEvents() {
     elements.sidebarToggle.addEventListener("click", toggleSidebar);
     elements.closeSidebar.addEventListener("click", closeSidebar);
@@ -678,6 +1295,12 @@
     window.addEventListener("popstate", syncPageFromLocation);
     elements.addTaskButton.addEventListener("click", () => openTaskModal());
     elements.emptyAddButton.addEventListener("click", () => openTaskModal());
+    elements.addResearchPlanButton.addEventListener("click", () => openResearchPlanModal());
+    elements.addResearchPlanInlineButton.addEventListener("click", () => openResearchPlanModal());
+    elements.addResearchScheduleButton.addEventListener("click", () => openResearchScheduleModal());
+    elements.addResearchScheduleInlineButton.addEventListener("click", () => openResearchScheduleModal());
+    elements.addResearchTaskButton.addEventListener("click", () => openTaskModal(null, { researchContext: true }));
+    elements.researchPage.addEventListener("click", handleResearchPageClick);
     elements.authForm.addEventListener("submit", handleAuthSubmit);
     elements.authModeButton.addEventListener("click", () => {
       state.authMode = state.authMode === "login" ? "signup" : "login";
@@ -691,6 +1314,20 @@
     elements.deleteTaskButton.addEventListener("click", () => deleteTask(state.editingTaskId));
     elements.taskModal.addEventListener("click", (event) => {
       if (event.target === elements.taskModal) closeTaskModal();
+    });
+    elements.researchPlanForm.addEventListener("submit", saveResearchPlan);
+    elements.closeResearchPlanModal.addEventListener("click", closeResearchPlanModal);
+    elements.cancelResearchPlanButton.addEventListener("click", closeResearchPlanModal);
+    elements.deleteResearchPlanButton.addEventListener("click", () => deleteResearchPlan(state.editingPlanId));
+    elements.researchPlanModal.addEventListener("click", (event) => {
+      if (event.target === elements.researchPlanModal) closeResearchPlanModal();
+    });
+    elements.researchScheduleForm.addEventListener("submit", saveResearchSchedule);
+    elements.closeResearchScheduleModal.addEventListener("click", closeResearchScheduleModal);
+    elements.cancelResearchScheduleButton.addEventListener("click", closeResearchScheduleModal);
+    elements.deleteResearchScheduleButton.addEventListener("click", () => deleteResearchSchedule(state.editingScheduleId));
+    elements.researchScheduleModal.addEventListener("click", (event) => {
+      if (event.target === elements.researchScheduleModal) closeResearchScheduleModal();
     });
     elements.accountButton.addEventListener("click", () => {
       elements.accountMenu.hidden = !elements.accountMenu.hidden;
@@ -710,26 +1347,10 @@
         render();
       });
     });
-    elements.taskList.addEventListener("click", (event) => {
-      const target = event.target.closest("[data-action]");
-      const card = event.target.closest("[data-task-id]");
-      if (!target || !card) return;
-      const taskId = card.dataset.taskId;
-      const task = state.tasks.find((item) => item.id === taskId);
-      if (!task) return;
-      if (target.dataset.action === "toggle") toggleTask(taskId);
-      if (target.dataset.action === "edit") openTaskModal(task);
-      if (target.dataset.action === "delete") deleteTask(taskId);
-    });
-    elements.taskList.addEventListener("keydown", (event) => {
-      const target = event.target.closest('[data-action="edit"]');
-      if (target && (event.key === "Enter" || event.key === " ")) {
-        event.preventDefault();
-        const card = target.closest("[data-task-id]");
-        const task = state.tasks.find((item) => item.id === card?.dataset.taskId);
-        if (task) openTaskModal(task);
-      }
-    });
+    elements.taskList.addEventListener("click", handleTaskListClick);
+    elements.taskList.addEventListener("keydown", handleTaskListKeydown);
+    elements.researchTaskList.addEventListener("click", handleTaskListClick);
+    elements.researchTaskList.addEventListener("keydown", handleTaskListKeydown);
     document.addEventListener("click", (event) => {
       if (!elements.accountMenu.hidden && !event.target.closest(".account-menu, .account-button")) {
         elements.accountMenu.hidden = true;
@@ -739,6 +1360,8 @@
       const tag = document.activeElement?.tagName;
       const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
       if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
+      else if (event.key === "Escape" && !elements.researchPlanModal.hidden) closeResearchPlanModal();
+      else if (event.key === "Escape" && !elements.researchScheduleModal.hidden) closeResearchScheduleModal();
       else if (event.key === "Escape" && document.body.classList.contains("sidebar-open")) closeSidebar();
       if (typing || elements.authShell.hidden === false) return;
       if (!["home", "todo"].includes(state.sidebarView)) return;
@@ -777,7 +1400,7 @@
     }
 
     if ("serviceWorker" in navigator && (window.isSecureContext || location.hostname === "localhost")) {
-      navigator.serviceWorker.register("./sw.js?v=0.1.7", { updateViaCache: "none" }).catch((error) => console.warn("PWA登録に失敗しました", error));
+      navigator.serviceWorker.register("./sw.js?v=0.2.0", { updateViaCache: "none" }).catch((error) => console.warn("PWA登録に失敗しました", error));
     }
   }
 
