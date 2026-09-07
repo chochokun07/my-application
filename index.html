@@ -64,6 +64,10 @@
         </button>
 
         <p class="sidebar-section-label">活動</p>
+        <button class="sidebar-nav-item" type="button" data-sidebar-view="hobby">
+          <span class="sidebar-nav-icon sidebar-nav-icon-hobby" aria-hidden="true">✦</span>
+          <span class="sidebar-nav-label">趣味</span>
+        </button>
         <button class="sidebar-nav-item" type="button" data-sidebar-view="research">
           <span class="sidebar-nav-icon sidebar-nav-icon-research" aria-hidden="true">⌁</span>
           <span class="sidebar-nav-label">研究</span>
@@ -239,6 +243,162 @@
             <button class="text-button" type="button" data-empty-action="task">研究タスクを追加</button>
           </div>
         </section>
+      </section>
+
+      <section id="hobbyPage" class="page-view hobby-page" data-page-view="hobby" hidden aria-labelledby="hobbyPageTitle">
+        <div class="page-heading hobby-page-heading">
+          <div>
+            <p class="section-kicker">HOBBY</p>
+            <h1 id="hobbyPageTitle">趣味</h1>
+            <p class="page-subtitle">動画ごとの構想と台本を、同じプロジェクトで管理します。</p>
+          </div>
+          <div class="page-heading-actions">
+            <button class="primary-button" type="button" data-hobby-action="add-project"><span class="button-plus">＋</span><span>プロジェクトを追加</span></button>
+          </div>
+        </div>
+
+        <div id="hobbyDataNotice" class="research-data-notice" hidden>
+          <span class="setup-icon">i</span>
+          <span id="hobbyDataNoticeText"></span>
+        </div>
+
+        <div class="hobby-project-layout">
+          <aside class="hobby-project-panel" aria-label="動画プロジェクト一覧">
+            <div class="hobby-panel-heading">
+              <div>
+                <p class="section-kicker">PROJECTS</p>
+                <h2>プロジェクト</h2>
+              </div>
+              <span class="hobby-panel-count">構想＋台本</span>
+            </div>
+            <div id="hobbyProjectList" class="hobby-project-list"></div>
+            <div id="hobbyProjectEmpty" class="hobby-empty-state" hidden>
+              <strong>プロジェクトがありません</strong>
+              <span>動画ごとに最初のプロジェクトを作成してください。</span>
+            </div>
+          </aside>
+
+          <section id="hobbyWorkspace" class="hobby-workspace" hidden aria-label="プロジェクトワークスペース">
+            <header class="hobby-workspace-header">
+              <div>
+                <p id="hobbyProjectType" class="section-kicker"></p>
+                <h2 id="hobbyProjectTitle"></h2>
+              </div>
+              <div id="hobbyProjectActions" class="hobby-project-actions" hidden>
+                <button class="text-button" type="button" data-hobby-action="edit-project">名称変更</button>
+                <button id="hobbyIdentityModeButton" class="text-button" type="button" data-hobby-action="make-identity">特色人格構想にする</button>
+                <button class="hobby-danger-button" type="button" data-hobby-action="delete-project">削除</button>
+              </div>
+            </header>
+
+            <div class="hobby-tabs" role="tablist" aria-label="プロジェクトのページ">
+              <button class="hobby-tab is-active" type="button" data-hobby-tab="concept" role="tab">構想</button>
+              <button class="hobby-tab" type="button" data-hobby-tab="script" role="tab">台本（スクリプトエディター）</button>
+            </div>
+
+            <div id="hobbyConceptPane" class="hobby-pane" role="tabpanel">
+              <div id="hobbyGenericConcept" class="hobby-generic-concept">
+                <p class="hobby-pane-kicker">PROJECT CONCEPT</p>
+                <h3 id="hobbyConceptProjectLabel"></h3>
+                <p class="hobby-help-text">この動画の狙い、構成、調査メモなどをまとめます。</p>
+                <label class="hobby-field-label" for="hobbyConceptBody">構想メモ</label>
+                <textarea id="hobbyConceptBody" class="hobby-concept-textarea" rows="16" placeholder="動画で扱うこと、見せ場、調査したいことをメモしてください。"></textarea>
+                <div class="hobby-pane-footer">
+                  <span>プロジェクトに紐づいて保存されます。</span>
+                  <button class="primary-button" type="button" data-hobby-action="save-concept">構想を保存</button>
+                </div>
+              </div>
+
+              <div id="hobbyIdentityConcept" class="hobby-identity-concept" hidden>
+                <div class="hobby-identity-intro">
+                  <div>
+                    <p class="hobby-pane-kicker">COLORED FIXER NOTES</p>
+                    <h3 id="hobbyIdentityProjectLabel"></h3>
+                  </div>
+                  <p>特色ごとの人格設定・実装予想・性能・運用メモを、動画プロジェクトの構想ページとして管理します。</p>
+                </div>
+                <div class="hobby-identity-toolbar">
+                  <label class="hobby-field-label" for="hobbyIdentityTarget">予想対象</label>
+                  <select id="hobbyIdentityTarget" class="hobby-select"></select>
+                </div>
+                <div id="hobbyIdentitySectionTabs" class="hobby-section-tabs" role="tablist" aria-label="特色人格構想の項目"></div>
+                <div id="hobbyIdentityFields" class="hobby-identity-fields"></div>
+                <div class="hobby-pane-footer">
+                  <span>項目からフォーカスを外すと保存されます。</span>
+                  <button class="secondary-button" type="button" data-hobby-action="add-custom">自由項目を追加</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="hobbyScriptPane" class="hobby-pane" role="tabpanel" hidden>
+              <div class="hobby-script-layout">
+                <aside class="hobby-chapter-panel" aria-label="チャプター">
+                  <div class="hobby-subpanel-heading">
+                    <div>
+                      <p class="hobby-pane-kicker">CHAPTERS</p>
+                      <h3>チャプター</h3>
+                    </div>
+                    <button class="icon-button" type="button" data-hobby-action="add-chapter" aria-label="チャプターを追加">＋</button>
+                  </div>
+                  <div id="hobbyChapterList" class="hobby-chapter-list"></div>
+                  <div id="hobbyChapterEmpty" class="hobby-empty-state hobby-empty-state-compact" hidden>
+                    <span>チャプターを追加してください。</span>
+                  </div>
+                  <div class="hobby-chapter-actions">
+                    <button class="text-button" type="button" data-hobby-action="edit-chapter">名称変更</button>
+                    <button class="hobby-danger-button" type="button" data-hobby-action="delete-chapter">削除</button>
+                  </div>
+                </aside>
+
+                <div class="hobby-script-editor">
+                  <div class="hobby-script-heading">
+                    <div>
+                      <p class="hobby-pane-kicker">SCRIPT EDITOR</p>
+                      <h3 id="hobbyCurrentChapterName"></h3>
+                    </div>
+                    <div class="hobby-script-heading-actions">
+                      <button class="secondary-button" type="button" data-hobby-action="export-script">書き出し</button>
+                      <button class="primary-button" type="button" data-hobby-action="add-line">＋ セリフ</button>
+                    </div>
+                  </div>
+                  <div id="hobbyLineList" class="hobby-line-list"></div>
+                  <div id="hobbyLineEmpty" class="hobby-empty-state" hidden>
+                    <strong>セリフがありません</strong>
+                    <span>「＋ セリフ」から台本を追加できます。</span>
+                  </div>
+                  <div class="hobby-script-stats">
+                    <span id="hobbyScriptStats">0文字 / 約0分</span>
+                  </div>
+
+                  <div class="hobby-script-settings">
+                    <label>
+                      出力テンプレート
+                      <input id="hobbyOutputTemplate" type="text" placeholder="{speaker}「{body}」" />
+                    </label>
+                    <label>
+                      1分あたりの文字数
+                      <input id="hobbyCharsPerMinute" type="number" min="1" max="2000" step="1" />
+                    </label>
+                  </div>
+
+                  <div class="hobby-speaker-box">
+                    <div class="hobby-subpanel-heading">
+                      <div>
+                        <p class="hobby-pane-kicker">SPEAKERS</p>
+                        <h3>話者</h3>
+                      </div>
+                    </div>
+                    <div class="hobby-speaker-add">
+                      <input id="hobbySpeakerInput" type="text" placeholder="話者名" />
+                      <button class="secondary-button" type="button" data-hobby-action="add-speaker">追加</button>
+                    </div>
+                    <ul id="hobbySpeakerList" class="hobby-speaker-list"></ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="creationPage" class="page-view blank-page" data-page-view="creation" hidden aria-labelledby="creationPageTitle">
@@ -464,6 +624,7 @@
 
     <script src="./config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./hobby.js" defer></script>
     <script src="./app.js" defer></script>
   </body>
 </html>
