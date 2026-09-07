@@ -13,12 +13,16 @@ create table if not exists public.tasks (
   due_date date,
   priority text not null default 'medium'
     check (priority in ('low', 'medium', 'high')),
+  tags text[] not null default '{}',
   created_at timestamptz not null default timezone('utc', now()),
   completed_at timestamptz,
   reminder_at timestamptz,
   reminder_enabled boolean not null default false,
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.tasks
+  add column if not exists tags text[] not null default '{}';
 
 create index if not exists tasks_user_id_created_at_idx
   on public.tasks (user_id, created_at desc);
