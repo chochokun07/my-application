@@ -14,7 +14,7 @@
   const SCHEDULE_SELECT_FIELDS = "id, title, scheduled_at, kind, plan_id, notes, created_at, updated_at";
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
-  const PAGE_VIEWS = new Set(["home", "todo", "research", "creation"]);
+  const PAGE_VIEWS = new Set(["home", "todo", "research", "creation", "hobby"]);
   const supabaseClient = hasRemoteConfig && window.supabase?.createClient
     ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
       auth: {
@@ -52,6 +52,7 @@
     todoPage: $("todoPage"),
     researchPage: $("researchPage"),
     creationPage: $("creationPage"),
+    hobbyPage: $("hobbyPage"),
     researchDataNotice: $("researchDataNotice"),
     researchDataNoticeText: $("researchDataNoticeText"),
     researchOpenPlanCount: $("researchOpenPlanCount"),
@@ -689,6 +690,7 @@
     elements.todoPage.hidden = !isTodoPage;
     elements.researchPage.hidden = state.sidebarView !== "research";
     elements.creationPage.hidden = state.sidebarView !== "creation";
+    elements.hobbyPage.hidden = state.sidebarView !== "hobby";
     elements.appShell.dataset.page = state.sidebarView;
 
     document.querySelectorAll(".view-tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === state.view));
