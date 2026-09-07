@@ -564,6 +564,62 @@ code {
   padding: 68px 0 42px;
 }
 
+.page-view {
+  width: 100%;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 35px;
+}
+
+.page-heading h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(37px, 6vw, 64px);
+  font-weight: 400;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.blank-page-panel {
+  display: grid;
+  min-height: 420px;
+  place-items: center;
+  padding: 50px 20px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 253, 248, 0.67);
+  box-shadow: var(--shadow);
+}
+
+.blank-page-mark {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(31, 61, 56, 0.14);
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 23px;
+}
+
+#researchPage .blank-page-mark {
+  border-color: rgba(217, 128, 85, 0.2);
+  background: #fff0e9;
+  color: var(--orange);
+}
+
+#creationPage .blank-page-mark {
+  border-color: rgba(138, 90, 221, 0.16);
+  background: #f4edff;
+  color: #8a5add;
+}
+
 .hero-section {
   display: flex;
   align-items: flex-end;
@@ -1462,6 +1518,20 @@ select:hover {
   .app-shell {
     width: min(100% - 28px, 1120px);
     padding-top: 45px;
+  }
+
+  .page-heading {
+    align-items: flex-start;
+    margin-bottom: 28px;
+  }
+
+  .page-heading h1 {
+    font-size: clamp(41px, 14vw, 58px);
+  }
+
+  .blank-page-panel {
+    min-height: 420px;
+    border-radius: 17px;
   }
 
   .setup-notice {

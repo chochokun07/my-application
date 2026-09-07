@@ -62,17 +62,17 @@
           <span id="sidebarTodoCount" class="sidebar-nav-count">0</span>
         </button>
 
-        <p class="sidebar-section-label">これから追加</p>
-        <button class="sidebar-nav-item is-disabled" type="button" disabled>
+        <p class="sidebar-section-label">活動</p>
+        <button class="sidebar-nav-item" type="button" data-sidebar-view="research">
           <span class="sidebar-nav-icon sidebar-nav-icon-research" aria-hidden="true">⌁</span>
           <span class="sidebar-nav-label">研究</span>
-          <span class="sidebar-nav-badge">準備中</span>
         </button>
-        <button class="sidebar-nav-item is-disabled" type="button" disabled>
+        <button class="sidebar-nav-item" type="button" data-sidebar-view="creation">
           <span class="sidebar-nav-icon sidebar-nav-icon-creative" aria-hidden="true">✎</span>
           <span class="sidebar-nav-label">創作</span>
-          <span class="sidebar-nav-badge">準備中</span>
         </button>
+
+        <p class="sidebar-section-label">これから追加</p>
         <button class="sidebar-nav-item is-disabled" type="button" disabled>
           <span class="sidebar-nav-icon sidebar-nav-icon-life" aria-hidden="true">◇</span>
           <span class="sidebar-nav-label">生活</span>
@@ -94,61 +94,87 @@
     </div>
 
     <main id="appShell" class="app-shell" hidden>
-      <section class="hero-section">
-        <div>
-          <p id="dateLabel" class="section-kicker">TODAY</p>
-          <h1>今日やること</h1>
-          <p id="todaySubtitle" class="hero-subtitle">今取り組むタスクをまとめています。</p>
+      <div id="todoPage" class="page-view" data-page-view="todo">
+        <section class="hero-section">
+          <div>
+            <p id="dateLabel" class="section-kicker">TODAY</p>
+            <h1>今日やること</h1>
+            <p id="todaySubtitle" class="hero-subtitle">今取り組むタスクをまとめています。</p>
+          </div>
+          <button id="addTaskButton" class="primary-button" type="button">
+            <span class="button-plus">＋</span>
+            <span>タスク追加</span>
+          </button>
+        </section>
+
+        <section class="summary-grid" aria-label="タスク概要">
+          <article class="summary-card summary-card-accent">
+            <span class="summary-label">未完了</span>
+            <strong id="openCount" class="summary-value">0</strong>
+            <span class="summary-caption">今日取り組む候補</span>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">進行中</span>
+            <strong id="progressCount" class="summary-value">0</strong>
+            <span class="summary-caption">手を付けているタスク</span>
+          </article>
+          <article class="summary-card">
+            <span class="summary-label">今日完了</span>
+            <strong id="completedTodayCount" class="summary-value">0</strong>
+            <span class="summary-caption">本日の完了数</span>
+          </article>
+        </section>
+
+        <section class="workspace-panel">
+          <div class="toolbar">
+            <nav class="view-tabs" aria-label="タスク表示切替">
+              <button class="view-tab is-active" type="button" data-view="today">今日 <span id="todayTabCount">0</span></button>
+              <button class="view-tab" type="button" data-view="all">すべて <span id="allTabCount">0</span></button>
+              <button class="view-tab" type="button" data-view="completed">完了 <span id="completedTabCount">0</span></button>
+            </nav>
+            <label class="search-box">
+              <span class="sr-only">タスクを検索</span>
+              <span class="search-icon">⌕</span>
+              <input id="searchInput" type="search" placeholder="タスクを検索" autocomplete="off" />
+            </label>
+          </div>
+
+          <div id="taskList" class="task-list" aria-live="polite"></div>
+
+          <div id="emptyState" class="empty-state" hidden>
+            <div class="empty-orbit" aria-hidden="true">✦</div>
+            <h2 id="emptyTitle">今日のタスクはありません</h2>
+            <p id="emptyDescription">思いついたことを、まずは一つだけ登録してみましょう。</p>
+            <button id="emptyAddButton" class="secondary-button" type="button">＋ タスクを追加</button>
+          </div>
+        </section>
+
+        <p class="keyboard-hint"><kbd>N</kbd> 新規タスク　<kbd>/</kbd> 検索</p>
+      </div>
+
+      <section id="researchPage" class="page-view blank-page" data-page-view="research" hidden aria-labelledby="researchPageTitle">
+        <div class="page-heading">
+          <div>
+            <p class="section-kicker">RESEARCH</p>
+            <h1 id="researchPageTitle">研究</h1>
+          </div>
         </div>
-        <button id="addTaskButton" class="primary-button" type="button">
-          <span class="button-plus">＋</span>
-          <span>タスク追加</span>
-        </button>
+        <div class="blank-page-panel" aria-label="研究ページの内容">
+          <div class="blank-page-mark" aria-hidden="true">⌁</div>
+        </div>
       </section>
 
-      <section class="summary-grid" aria-label="タスク概要">
-        <article class="summary-card summary-card-accent">
-          <span class="summary-label">未完了</span>
-          <strong id="openCount" class="summary-value">0</strong>
-          <span class="summary-caption">今日取り組む候補</span>
-        </article>
-        <article class="summary-card">
-          <span class="summary-label">進行中</span>
-          <strong id="progressCount" class="summary-value">0</strong>
-          <span class="summary-caption">手を付けているタスク</span>
-        </article>
-        <article class="summary-card">
-          <span class="summary-label">今日完了</span>
-          <strong id="completedTodayCount" class="summary-value">0</strong>
-          <span class="summary-caption">本日の完了数</span>
-        </article>
-      </section>
-
-      <section class="workspace-panel">
-        <div class="toolbar">
-          <nav class="view-tabs" aria-label="タスク表示切替">
-            <button class="view-tab is-active" type="button" data-view="today">今日 <span id="todayTabCount">0</span></button>
-            <button class="view-tab" type="button" data-view="all">すべて <span id="allTabCount">0</span></button>
-            <button class="view-tab" type="button" data-view="completed">完了 <span id="completedTabCount">0</span></button>
-          </nav>
-          <label class="search-box">
-            <span class="sr-only">タスクを検索</span>
-            <span class="search-icon">⌕</span>
-            <input id="searchInput" type="search" placeholder="タスクを検索" autocomplete="off" />
-          </label>
+      <section id="creationPage" class="page-view blank-page" data-page-view="creation" hidden aria-labelledby="creationPageTitle">
+        <div class="page-heading">
+          <div>
+            <p class="section-kicker">CREATION</p>
+            <h1 id="creationPageTitle">創作</h1>
+          </div>
         </div>
-
-        <div id="taskList" class="task-list" aria-live="polite"></div>
-
-        <div id="emptyState" class="empty-state" hidden>
-          <div class="empty-orbit" aria-hidden="true">✦</div>
-          <h2 id="emptyTitle">今日のタスクはありません</h2>
-          <p id="emptyDescription">思いついたことを、まずは一つだけ登録してみましょう。</p>
-          <button id="emptyAddButton" class="secondary-button" type="button">＋ タスクを追加</button>
+        <div class="blank-page-panel" aria-label="創作ページの内容">
+          <div class="blank-page-mark" aria-hidden="true">✎</div>
         </div>
       </section>
-
-      <p class="keyboard-hint"><kbd>N</kbd> 新規タスク　<kbd>/</kbd> 検索</p>
     </main>
 
     <section id="authShell" class="auth-shell" hidden>

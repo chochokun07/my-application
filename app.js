@@ -6,6 +6,7 @@
   const TABLE_NAME = "tasks";
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
+  const PAGE_VIEWS = new Set(["home", "todo", "research", "creation"]);
   const supabaseClient = hasRemoteConfig && window.supabase?.createClient
     ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
       auth: {
@@ -22,7 +23,7 @@
     user: null,
     tasks: [],
     view: "today",
-    sidebarView: "home",
+    sidebarView: getPageViewFromLocation(),
     search: "",
     authMode: "login",
     editingTaskId: null,
@@ -32,6 +33,9 @@
   const $ = (id) => document.getElementById(id);
   const elements = {
     appShell: $("appShell"),
+    todoPage: $("todoPage"),
+    researchPage: $("researchPage"),
+    creationPage: $("creationPage"),
     authShell: $("authShell"),
     setupNotice: $("setupNotice"),
     syncStatus: $("syncStatus"),
@@ -104,6 +108,11 @@
   const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
   const dateFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
   const dateTimeFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+  function getPageViewFromLocation() {
+    const hash = window.location.hash.replace(/^#/, "").trim().toLowerCase();
+    return PAGE_VIEWS.has(hash) ? hash : "home";
+  }
 
   function createId() {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -211,6 +220,39 @@
 
   function toggleSidebar() {
     setSidebarOpen(!document.body.classList.contains("sidebar-open"));
+  }
+
+  function updatePageLocation(view, replace = false) {
+    const url = new URL(window.location.href);
+    url.hash = view === "home" ? "" : view;
+    window.history[replace ? "replaceState" : "pushState"]({}, "", url);
+  }
+
+  function resetPageFilters() {
+    state.view = "today";
+    state.search = "";
+    elements.searchInput.value = "";
+  }
+
+  function navigateToPage(view) {
+    const nextPage = PAGE_VIEWS.has(view) ? view : "home";
+    if (nextPage !== state.sidebarView) updatePageLocation(nextPage);
+    state.sidebarView = nextPage;
+    resetPageFilters();
+    render();
+    closeSidebar();
+
+    if (nextPage === "todo") {
+      window.setTimeout(() => document.querySelector(".workspace-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function syncPageFromLocation() {
+    state.sidebarView = getPageViewFromLocation();
+    resetPageFilters();
+    render();
   }
 
   function showApp() {
@@ -339,6 +381,12 @@
     elements.sidebarTodoCount.textContent = String(openTasks.length);
     elements.dateLabel.textContent = new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date()).toUpperCase();
     elements.todaySubtitle.textContent = openTasks.length ? `${openTasks.length}件の未完了タスクがあります。` : "今取り組むタスクはありません。";
+
+    const isTodoPage = state.sidebarView === "home" || state.sidebarView === "todo";
+    elements.todoPage.hidden = !isTodoPage;
+    elements.researchPage.hidden = state.sidebarView !== "research";
+    elements.creationPage.hidden = state.sidebarView !== "creation";
+    elements.appShell.dataset.page = state.sidebarView;
 
     document.querySelectorAll(".view-tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === state.view));
     document.querySelectorAll("[data-sidebar-view]").forEach((item) => {
@@ -624,20 +672,10 @@
     elements.sidebarNav.addEventListener("click", (event) => {
       const item = event.target.closest("[data-sidebar-view]");
       if (!item) return;
-
-      state.sidebarView = item.dataset.sidebarView;
-      state.view = "today";
-      state.search = "";
-      elements.searchInput.value = "";
-      render();
-      closeSidebar();
-
-      if (state.sidebarView === "todo") {
-        window.setTimeout(() => document.querySelector(".workspace-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
-      } else {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
+      navigateToPage(item.dataset.sidebarView);
     });
+    window.addEventListener("hashchange", syncPageFromLocation);
+    window.addEventListener("popstate", syncPageFromLocation);
     elements.addTaskButton.addEventListener("click", () => openTaskModal());
     elements.emptyAddButton.addEventListener("click", () => openTaskModal());
     elements.authForm.addEventListener("submit", handleAuthSubmit);
@@ -703,6 +741,7 @@
       if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
       else if (event.key === "Escape" && document.body.classList.contains("sidebar-open")) closeSidebar();
       if (typing || elements.authShell.hidden === false) return;
+      if (!["home", "todo"].includes(state.sidebarView)) return;
       if (event.key.toLowerCase() === "n") openTaskModal();
       if (event.key === "/") {
         event.preventDefault();
