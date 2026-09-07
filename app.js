@@ -64,6 +64,7 @@
     taskStatus: $("taskStatus"),
     taskReminderAt: $("taskReminderAt"),
     taskReminderEnabled: $("taskReminderEnabled"),
+    taskTags: $("taskTags"),
     deleteTaskButton: $("deleteTaskButton"),
     closeTaskModal: $("closeTaskModal"),
     cancelTaskButton: $("cancelTaskButton"),
@@ -108,11 +109,17 @@
     return `${now.getFullYear()}-${month}-${day}`;
   }
 
+  function normalizeTags(value) {
+    const values = Array.isArray(value) ? value : String(value ?? "").split(/[,、，]/);
+    return [...new Set(values.map((tag) => String(tag).trim()).filter(Boolean))];
+  }
+
   function normalizeTask(task = {}) {
     return {
       id: task.id || createId(),
       title: String(task.title || "").trim(),
       memo: String(task.memo ?? ""),
+      tags: normalizeTags(task.tags),
       status: STATUS_LABELS[task.status] ? task.status : "todo",
       dueDate: task.due_date ?? task.dueDate ?? "",
       priority: PRIORITY_LABELS[task.priority] ? task.priority : "medium",
@@ -128,6 +135,7 @@
     return {
       title: task.title,
       memo: task.memo || null,
+      tags: task.tags,
       status: task.status,
       due_date: task.dueDate || null,
       priority: task.priority,
@@ -223,7 +231,7 @@
       if (state.view === "today" && task.status === "completed") return false;
       if (state.view === "completed" && task.status !== "completed") return false;
       if (!search) return true;
-      return `${task.title} ${task.memo}`.toLocaleLowerCase("ja-JP").includes(search);
+      return `${task.title} ${task.memo} ${task.tags.join(" ")}`.toLocaleLowerCase("ja-JP").includes(search);
     });
 
     return filtered.sort((a, b) => {
@@ -248,6 +256,9 @@
       ? `<span class="task-meta-item">♧ ${escapeHtml(formatDateTime(task.reminderAt))}</span>`
       : "";
     const memo = task.memo ? `<p class="task-memo">${escapeHtml(task.memo)}</p>` : "";
+    const tags = task.tags.length
+      ? `<div class="task-tags" aria-label="タグ">${task.tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag)}</span>`).join("")}</div>`
+      : "";
 
     return `
       <article class="task-card${task.status === "completed" ? " is-completed" : ""}" data-task-id="${escapeHtml(task.id)}">
@@ -264,6 +275,7 @@
             <span class="priority-chip priority-${escapeHtml(task.priority)}">${escapeHtml(PRIORITY_LABELS[task.priority])}</span>
             ${reminder}
           </div>
+          ${tags}
           ${memo}
         </div>
         <div class="task-actions">
@@ -313,7 +325,7 @@
     setSyncStatus("同期中", "connecting");
     const { data, error } = await supabaseClient
       .from(TABLE_NAME)
-      .select("id, title, memo, status, due_date, priority, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
+      .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
       .order("created_at", { ascending: false });
     if (error) throw error;
     state.tasks = (data || []).map(normalizeTask);
@@ -378,6 +390,7 @@
       id: state.editingTaskId || createId(),
       title: elements.taskTitle.value.trim(),
       memo: elements.taskMemo.value.trim(),
+      tags: normalizeTags(elements.taskTags.value),
       dueDate: elements.taskDueDate.value || "",
       priority: elements.taskPriority.value,
       status,
@@ -409,7 +422,7 @@
           .from(TABLE_NAME)
           .update(toDatabasePayload(task))
           .eq("id", task.id)
-          .select("id, title, memo, status, due_date, priority, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
+          .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
           .single();
         if (error) throw error;
         const index = state.tasks.findIndex((item) => item.id === task.id);
@@ -419,7 +432,7 @@
         const { data, error } = await supabaseClient
           .from(TABLE_NAME)
           .insert(toDatabasePayload(task))
-          .select("id, title, memo, status, due_date, priority, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
+          .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
           .single();
         if (error) throw error;
         state.tasks.unshift(normalizeTask(data));
@@ -456,7 +469,7 @@
           .from(TABLE_NAME)
           .update(toDatabasePayload(updated))
           .eq("id", taskId)
-          .select("id, title, memo, status, due_date, priority, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
+          .select("id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at")
           .single();
         if (error) throw error;
         state.tasks = state.tasks.map((item) => item.id === taskId ? normalizeTask(data) : item);
@@ -501,6 +514,7 @@
     elements.taskId.value = task?.id || "";
     elements.taskTitle.value = task?.title || "";
     elements.taskMemo.value = task?.memo || "";
+    elements.taskTags.value = task?.tags?.join(", ") || "";
     elements.taskDueDate.value = task?.dueDate || "";
     elements.taskPriority.value = task?.priority || "medium";
     elements.taskStatus.value = task?.status || "todo";
