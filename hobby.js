@@ -305,7 +305,7 @@
   }
 
   function findIdentityField(targetId, sectionId, fieldKey) {
-    return state.identityItems.find((item) => item.projectId === IDENTITY_PROJECT_ID
+    return state.identityItems.find((item) => item.projectId === (getProject()?.id || IDENTITY_PROJECT_ID)
       && item.targetId === targetId && item.sectionId === sectionId && item.fieldKey === fieldKey) || null;
   }
 
@@ -386,7 +386,7 @@
       const identityRows = LEGACY_SEED.identityItems.map((item) => ({
         id: item.id,
         user_id: state.user.id,
-        project_id: IDENTITY_PROJECT_ID,
+        project_id: item.projectId || IDENTITY_PROJECT_ID,
         target_id: item.targetId,
         section_id: item.sectionId,
         field_key: item.fieldKey,
@@ -651,7 +651,7 @@
       "<article class="hobby-dialogue-line" data-line-id="" + escapeHtml(line.id) + "">"
       + "<div class="hobby-line-toolbar"><span class="hobby-line-number">" + (index + 1) + "</span>"
       + "<select data-script-action="speaker">" + (line.speaker && !state.speakers.some((speaker) => speaker.name === line.speaker) ? "<option value="" + escapeHtml(line.speaker) + "" selected>" + escapeHtml(line.speaker) + "</option>" : "") + speakerOptions.replace("value="" + escapeHtml(line.speaker) + """, "value="" + escapeHtml(line.speaker) + "" selected") + "</select>"
-      + "<button type="button" data-script-action="up" aria-label="上へ">↑</button><button type="button" data-script-action="down" aria-label="下へ">↓</button><button type="button" data-script-action="delete" aria-label="削除">削除</button></div>"
+      + "<button type="button" data-hobby-action="move-up" aria-label="上へ">↑</button><button type="button" data-hobby-action="move-down" aria-label="下へ">↓</button><button type="button" data-hobby-action="delete-line" aria-label="削除">削除</button></div>"
       + "<textarea rows="3" data-script-action="body" placeholder="セリフ本文">" + escapeHtml(line.body) + "</textarea>"
       + "</article>"
     ).join("");
