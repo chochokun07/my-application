@@ -2119,3 +2119,560 @@ select:hover {
     animation-duration: 0.01ms !important;
   }
 }
+
+
+/* Hobby project workspace */
+.hobby-page {
+  padding-bottom: 72px;
+}
+
+.hobby-page-heading {
+  margin-bottom: 24px;
+}
+
+.hobby-project-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.hobby-project-panel,
+.hobby-workspace {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 253, 248, 0.82);
+  box-shadow: var(--shadow);
+}
+
+.hobby-project-panel {
+  position: sticky;
+  top: 94px;
+  padding: 18px;
+}
+
+.hobby-panel-heading,
+.hobby-subpanel-heading,
+.hobby-script-heading,
+.hobby-workspace-header,
+.hobby-pane-footer,
+.hobby-identity-toolbar,
+.hobby-speaker-add,
+.hobby-project-actions,
+.hobby-script-heading-actions,
+.hobby-chapter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hobby-panel-heading,
+.hobby-subpanel-heading,
+.hobby-script-heading,
+.hobby-workspace-header {
+  justify-content: space-between;
+}
+
+.hobby-panel-heading h2,
+.hobby-workspace-header h2,
+.hobby-subpanel-heading h3,
+.hobby-script-heading h3,
+.hobby-generic-concept h3,
+.hobby-identity-intro h3 {
+  margin: 0;
+}
+
+.hobby-panel-heading h2 {
+  font-size: 18px;
+}
+
+.hobby-panel-count,
+.hobby-project-card-meta,
+.hobby-help-text,
+.hobby-pane-footer,
+.hobby-identity-intro > p,
+.hobby-empty-state span,
+.hobby-script-stats {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.hobby-project-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.hobby-project-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.hobby-project-card:hover {
+  border-color: var(--line);
+  background: rgba(220, 233, 224, 0.42);
+  transform: translateY(-1px);
+}
+
+.hobby-project-card.is-active {
+  border-color: rgba(31, 61, 56, 0.22);
+  background: var(--green-soft);
+}
+
+.hobby-project-card-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hobby-project-card-meta {
+  font-size: 11px;
+}
+
+.hobby-empty-state {
+  display: grid;
+  gap: 5px;
+  padding: 24px 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.hobby-empty-state strong {
+  color: var(--muted-dark);
+  font-size: 13px;
+}
+
+.hobby-empty-state-compact {
+  padding: 18px 8px;
+  text-align: left;
+}
+
+.hobby-workspace {
+  overflow: hidden;
+}
+
+.hobby-workspace-header {
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hobby-workspace-header h2 {
+  font-size: clamp(24px, 4vw, 36px);
+  letter-spacing: -0.04em;
+}
+
+.hobby-project-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.hobby-danger-button,
+.hobby-inline-danger {
+  border: 0;
+  background: transparent;
+  color: var(--red);
+  font-size: 12px;
+}
+
+.hobby-danger-button {
+  padding: 6px 8px;
+}
+
+.hobby-inline-danger {
+  padding: 0 3px;
+  text-decoration: underline;
+}
+
+.hobby-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 12px 26px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.hobby-tab {
+  padding: 10px 13px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hobby-tab.is-active {
+  border-bottom-color: var(--orange);
+  color: var(--ink);
+}
+
+.hobby-pane {
+  padding: 26px;
+}
+
+.hobby-pane-kicker {
+  margin: 0 0 7px;
+  color: var(--orange);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.hobby-help-text {
+  margin: 8px 0 22px;
+}
+
+.hobby-field-label,
+.hobby-generic-concept label,
+.hobby-script-settings label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hobby-concept-textarea,
+.hobby-identity-field textarea,
+.hobby-dialogue-line textarea,
+.hobby-script-settings input,
+.hobby-speaker-add input,
+.hobby-select {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--ink);
+}
+
+.hobby-concept-textarea,
+.hobby-identity-field textarea,
+.hobby-dialogue-line textarea {
+  padding: 12px 13px;
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.hobby-pane-footer {
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.hobby-identity-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.hobby-identity-intro > p {
+  max-width: 430px;
+  margin: 0;
+}
+
+.hobby-identity-toolbar {
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+
+.hobby-identity-toolbar .hobby-field-label {
+  min-width: 140px;
+}
+
+.hobby-select {
+  min-height: 40px;
+  padding: 8px 11px;
+}
+
+.hobby-section-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hobby-section-tab {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-dark);
+  font-size: 12px;
+}
+
+.hobby-section-tab.is-active {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
+.hobby-identity-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 18px;
+}
+
+.hobby-identity-field {
+  display: grid;
+  gap: 7px;
+  color: var(--muted-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hobby-identity-field textarea {
+  min-height: 108px;
+}
+
+.hobby-custom-field {
+  border-left: 3px solid var(--yellow);
+  padding-left: 11px;
+}
+
+.hobby-script-layout {
+  display: grid;
+  grid-template-columns: minmax(160px, 205px) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.hobby-chapter-panel,
+.hobby-script-editor {
+  min-width: 0;
+}
+
+.hobby-chapter-panel {
+  padding-right: 18px;
+  border-right: 1px solid var(--line);
+}
+
+.hobby-subpanel-heading h3,
+.hobby-script-heading h3 {
+  font-size: 15px;
+}
+
+.hobby-chapter-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.hobby-chapter-button {
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted-dark);
+  font-size: 12px;
+  text-align: left;
+}
+
+.hobby-chapter-button.is-active,
+.hobby-chapter-button:hover {
+  border-color: var(--line);
+  background: var(--green-soft);
+  color: var(--ink);
+}
+
+.hobby-chapter-actions {
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
+.hobby-script-heading {
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.hobby-line-list {
+  display: grid;
+  gap: 10px;
+}
+
+.hobby-dialogue-line {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.hobby-line-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.hobby-line-toolbar select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.hobby-line-toolbar button {
+  min-width: 28px;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-dark);
+  font-size: 11px;
+}
+
+.hobby-line-number {
+  min-width: 24px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.hobby-dialogue-line textarea {
+  min-height: 72px;
+  background: rgba(255, 253, 248, 0.8);
+}
+
+.hobby-script-stats {
+  display: flex;
+  justify-content: flex-end;
+  padding: 9px 2px 0;
+}
+
+.hobby-script-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(140px, 0.7fr);
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.hobby-script-settings input {
+  min-height: 39px;
+  padding: 8px 10px;
+}
+
+.hobby-speaker-box {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.hobby-speaker-add {
+  margin-top: 12px;
+}
+
+.hobby-speaker-add input {
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.hobby-speaker-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 12px 0 0;
+  list-style: none;
+}
+
+.hobby-speaker-list li {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--muted-dark);
+  font-size: 11px;
+}
+
+@media (max-width: 880px) {
+  .hobby-project-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hobby-project-panel {
+    position: static;
+  }
+
+  .hobby-project-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hobby-script-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hobby-chapter-panel {
+    padding-right: 0;
+    padding-bottom: 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .hobby-chapter-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .hobby-workspace-header,
+  .hobby-pane {
+    padding: 19px 16px;
+  }
+
+  .hobby-workspace-header,
+  .hobby-identity-intro,
+  .hobby-pane-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .hobby-project-actions,
+  .hobby-script-heading-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .hobby-tabs {
+    padding: 9px 16px 0;
+  }
+
+  .hobby-identity-fields,
+  .hobby-script-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .hobby-project-list,
+  .hobby-chapter-list {
+    grid-template-columns: 1fr;
+  }
+
+  .hobby-line-toolbar {
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  }
+
+  .hobby-line-toolbar button {
+    padding: 5px 4px;
+  }
+
+  .hobby-script-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
