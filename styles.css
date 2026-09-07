@@ -177,11 +177,8 @@ a:focus-visible {
 }
 
 .auth-mark {
-  display: grid;
-  place-items: center;
-  background: var(--green);
-  color: var(--yellow);
-  font-size: 19px;
+  display: block;
+  object-fit: cover;
 }
 
 .brand-overline,
