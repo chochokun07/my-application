@@ -489,7 +489,7 @@
       const result = await remoteClient.from(TABLES.identity).upsert({
         id: item.id,
         user_id: state.user.id,
-        project_id: IDENTITY_PROJECT_ID,
+        project_id: item.projectId || IDENTITY_PROJECT_ID,
         target_id: item.targetId,
         section_id: item.sectionId,
         field_key: item.fieldKey,
@@ -571,7 +571,7 @@
     state.chapters = state.chapters.filter((chapter) => chapter.projectId !== project.id);
     state.lines = state.lines.filter((line) => !chapterIds.has(line.chapterId));
     state.concepts = state.concepts.filter((concept) => concept.projectId !== project.id);
-    if (project.id === IDENTITY_PROJECT_ID) state.identityItems = [];
+    state.identityItems = state.identityItems.filter((item) => item.projectId !== project.id);
     if (!state.projects.length) seedLocalState();
     state.selectedProjectId = state.projects[0]?.id || "";
     state.selectedChapterId = getChapters(state.selectedProjectId)[0]?.id || "";
