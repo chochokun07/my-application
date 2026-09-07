@@ -14,13 +14,18 @@
     <div class="app-background" aria-hidden="true"></div>
 
     <header class="topbar">
-      <a class="brand" href="./" aria-label="My application ホーム">
-        <span class="brand-mark">✦</span>
-        <span>
-          <span class="brand-overline">PERSONAL PLATFORM</span>
-          <span class="brand-title">My application</span>
-        </span>
-      </a>
+      <div class="topbar-leading">
+        <button id="sidebarToggle" class="icon-button sidebar-toggle" type="button" aria-controls="appSidebar" aria-expanded="false" aria-label="サイドバーを開く">
+          <span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+        </button>
+        <a class="brand" href="./" aria-label="My application ホーム">
+          <span class="brand-mark">✦</span>
+          <span>
+            <span class="brand-overline">PERSONAL PLATFORM</span>
+            <span class="brand-title">My application</span>
+          </span>
+        </a>
+      </div>
       <div class="topbar-actions">
         <span id="syncStatus" class="sync-status" data-state="local">この端末のみ</span>
         <button id="accountButton" class="icon-button account-button" type="button" hidden aria-label="アカウントメニュー">
@@ -29,7 +34,60 @@
       </div>
     </header>
 
-    <div id="setupNotice" class="setup-notice" hidden>
+    <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
+    <aside id="appSidebar" class="app-sidebar" aria-label="アプリメニュー" aria-hidden="true">
+      <div class="sidebar-header">
+        <a class="sidebar-brand" href="./" aria-label="My application ホーム">
+          <span class="brand-mark">✦</span>
+          <span class="sidebar-brand-title">My application</span>
+        </a>
+        <button id="closeSidebar" class="icon-button sidebar-close" type="button" aria-label="サイドバーを閉じる">×</button>
+      </div>
+
+      <div class="sidebar-intro">
+        <p class="sidebar-eyebrow">PERSONAL PLATFORM</p>
+        <p class="sidebar-heading">自分の活動を<br />ここに集める</p>
+      </div>
+
+      <nav id="sidebarNav" class="sidebar-nav" aria-label="アプリの機能">
+        <p class="sidebar-section-label">メイン</p>
+        <button class="sidebar-nav-item is-active" type="button" data-sidebar-view="home" aria-current="page">
+          <span class="sidebar-nav-icon" aria-hidden="true">⌂</span>
+          <span class="sidebar-nav-label">ホーム</span>
+        </button>
+        <button class="sidebar-nav-item" type="button" data-sidebar-view="todo">
+          <span class="sidebar-nav-icon" aria-hidden="true">✓</span>
+          <span class="sidebar-nav-label">To Do</span>
+          <span id="sidebarTodoCount" class="sidebar-nav-count">0</span>
+        </button>
+
+        <p class="sidebar-section-label">これから追加</p>
+        <button class="sidebar-nav-item is-disabled" type="button" disabled>
+          <span class="sidebar-nav-icon sidebar-nav-icon-research" aria-hidden="true">⌁</span>
+          <span class="sidebar-nav-label">研究</span>
+          <span class="sidebar-nav-badge">準備中</span>
+        </button>
+        <button class="sidebar-nav-item is-disabled" type="button" disabled>
+          <span class="sidebar-nav-icon sidebar-nav-icon-creative" aria-hidden="true">✎</span>
+          <span class="sidebar-nav-label">創作</span>
+          <span class="sidebar-nav-badge">準備中</span>
+        </button>
+        <button class="sidebar-nav-item is-disabled" type="button" disabled>
+          <span class="sidebar-nav-icon sidebar-nav-icon-life" aria-hidden="true">◇</span>
+          <span class="sidebar-nav-label">生活</span>
+          <span class="sidebar-nav-badge">準備中</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-sync-row">
+          <span class="sidebar-sync-dot" aria-hidden="true"></span>
+          <span id="sidebarSyncStatus">この端末のみ</span>
+        </div>
+        <p>必要な機能を、ここに少しずつ追加していきます。</p>
+      </div>
+    </aside>    <div id="setupNotice" class="setup-notice" hidden>
       <span class="setup-icon">i</span>
       <span>同期設定前のため、この端末に保存しています。<code>config.js</code>にSupabaseの情報を設定すると、PC・スマートフォン間で同期できます。</span>
       <button id="openAuthButton" class="notice-link" type="button">同期ログイン</button>
