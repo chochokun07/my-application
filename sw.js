@@ -1,9 +1,10 @@
-const CACHE_NAME = "my-application-v0.2.0";
+const CACHE_NAME = "my-application-v0.3.0";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./hobby.js",
   "./manifest.webmanifest",
   "./assets/icon.png",
   "./assets/icon-192.png",
