@@ -810,7 +810,7 @@
     });
     try {
       await saveLine(line, true);
-      window.setTimeout(() => document.querySelector("[data-line-id="" + line.id + ""] textarea")?.focus(), 30);
+      window.setTimeout(() => document.querySelector('[data-line-id="' + line.id + '"] textarea')?.focus(), 30);
     } catch (error) {
       notify("セリフの保存に失敗しました: " + error.message, true);
     }
@@ -923,6 +923,7 @@
     render();
   }
 
+
   function exportScript() {
     const project = getProject();
     if (!project) return;
@@ -934,11 +935,10 @@
       });
       rows.push("");
     });
-    const blob = new Blob([rows.join("
-")], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([rows.join("\n")], { type: "text/plain;charset=utf-8" });
     const anchor = document.createElement("a");
     anchor.href = URL.createObjectURL(blob);
-    anchor.download = project.name.replace(/[\/:*?"<>|]/g, "_") + ".txt";
+    anchor.download = project.name.replace(/[\\/:*?"<>|]/g, "_") + ".txt";
     anchor.click();
     URL.revokeObjectURL(anchor.href);
   }
