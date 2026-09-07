@@ -22,6 +22,7 @@
     user: null,
     tasks: [],
     view: "today",
+    sidebarView: "home",
     search: "",
     authMode: "login",
     editingTaskId: null,
@@ -34,6 +35,13 @@
     authShell: $("authShell"),
     setupNotice: $("setupNotice"),
     syncStatus: $("syncStatus"),
+    sidebarToggle: $("sidebarToggle"),
+    sidebarBackdrop: $("sidebarBackdrop"),
+    appSidebar: $("appSidebar"),
+    closeSidebar: $("closeSidebar"),
+    sidebarNav: $("sidebarNav"),
+    sidebarSyncStatus: $("sidebarSyncStatus"),
+    sidebarTodoCount: $("sidebarTodoCount"),
     accountButton: $("accountButton"),
     accountInitial: $("accountInitial"),
     accountMenu: $("accountMenu"),
@@ -163,6 +171,9 @@
   function setSyncStatus(label, status) {
     elements.syncStatus.textContent = label;
     elements.syncStatus.dataset.state = status;
+    elements.sidebarSyncStatus.textContent = label;
+    elements.sidebarSyncStatus.dataset.state = status;
+    elements.sidebarSyncStatus.parentElement.dataset.state = status;
   }
 
   function showToast(message, isError = false) {
@@ -178,15 +189,42 @@
     elements.authMessage.className = `form-message${type ? ` is-${type}` : ""}`;
   }
 
+
+  function setSidebarOpen(isOpen) {
+    const wasOpen = document.body.classList.contains("sidebar-open");
+    document.body.classList.toggle("sidebar-open", isOpen);
+    elements.sidebarToggle.setAttribute("aria-expanded", String(isOpen));
+    elements.sidebarToggle.setAttribute("aria-label", isOpen ? "サイドバーを閉じる" : "サイドバーを開く");
+    elements.appSidebar.setAttribute("aria-hidden", String(!isOpen));
+    elements.sidebarBackdrop.setAttribute("aria-hidden", String(!isOpen));
+
+    if (isOpen) {
+      window.setTimeout(() => elements.closeSidebar.focus(), 40);
+    } else if (wasOpen && elements.appSidebar.contains(document.activeElement)) {
+      elements.sidebarToggle.focus();
+    }
+  }
+
+  function closeSidebar() {
+    setSidebarOpen(false);
+  }
+
+  function toggleSidebar() {
+    setSidebarOpen(!document.body.classList.contains("sidebar-open"));
+  }
+
   function showApp() {
     elements.authShell.hidden = true;
     elements.appShell.hidden = false;
+    elements.sidebarToggle.disabled = false;
     render();
   }
 
   function showAuth(message = "") {
+    closeSidebar();
     elements.appShell.hidden = true;
     elements.authShell.hidden = false;
+    elements.sidebarToggle.disabled = true;
     elements.accountMenu.hidden = true;
     elements.accountButton.hidden = true;
     setAuthMessage(message);
@@ -298,10 +336,17 @@
     elements.todayTabCount.textContent = String(openTasks.length);
     elements.allTabCount.textContent = String(state.tasks.length);
     elements.completedTabCount.textContent = String(state.tasks.filter((task) => task.status === "completed").length);
+    elements.sidebarTodoCount.textContent = String(openTasks.length);
     elements.dateLabel.textContent = new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date()).toUpperCase();
     elements.todaySubtitle.textContent = openTasks.length ? `${openTasks.length}件の未完了タスクがあります。` : "今取り組むタスクはありません。";
 
     document.querySelectorAll(".view-tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === state.view));
+    document.querySelectorAll("[data-sidebar-view]").forEach((item) => {
+      const isActive = item.dataset.sidebarView === state.sidebarView;
+      item.classList.toggle("is-active", isActive);
+      if (isActive) item.setAttribute("aria-current", "page");
+      else item.removeAttribute("aria-current");
+    });
     elements.taskList.innerHTML = visibleTasks.map(renderTask).join("");
     elements.taskList.hidden = visibleTasks.length === 0;
     elements.emptyState.hidden = visibleTasks.length !== 0;
@@ -573,6 +618,26 @@
   }
 
   function bindEvents() {
+    elements.sidebarToggle.addEventListener("click", toggleSidebar);
+    elements.closeSidebar.addEventListener("click", closeSidebar);
+    elements.sidebarBackdrop.addEventListener("click", closeSidebar);
+    elements.sidebarNav.addEventListener("click", (event) => {
+      const item = event.target.closest("[data-sidebar-view]");
+      if (!item) return;
+
+      state.sidebarView = item.dataset.sidebarView;
+      state.view = "today";
+      state.search = "";
+      elements.searchInput.value = "";
+      render();
+      closeSidebar();
+
+      if (state.sidebarView === "todo") {
+        window.setTimeout(() => document.querySelector(".workspace-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    });
     elements.addTaskButton.addEventListener("click", () => openTaskModal());
     elements.emptyAddButton.addEventListener("click", () => openTaskModal());
     elements.authForm.addEventListener("submit", handleAuthSubmit);
@@ -636,6 +701,7 @@
       const tag = document.activeElement?.tagName;
       const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
       if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
+      else if (event.key === "Escape" && document.body.classList.contains("sidebar-open")) closeSidebar();
       if (typing || elements.authShell.hidden === false) return;
       if (event.key.toLowerCase() === "n") openTaskModal();
       if (event.key === "/") {
