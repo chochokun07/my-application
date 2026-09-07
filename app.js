@@ -7,7 +7,14 @@
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
   const supabaseClient = hasRemoteConfig && window.supabase?.createClient
-    ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY)
+    ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage,
+      },
+    })
     : null;
 
   const state = {
