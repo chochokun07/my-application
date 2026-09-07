@@ -660,7 +660,7 @@
         '<select data-script-action="speaker">' + options + "</select>" +
         '<button type="button" data-hobby-action="move-up" aria-label="上へ">↑</button>' +
         '<button type="button" data-hobby-action="move-down" aria-label="下へ">↓</button>' +
-        '<button type="button" data-hobby-action="delete-line" aria-label="削除">削除</button></div>" +
+        '<button type="button" data-hobby-action="delete-line" aria-label="削除">削除</button></div>' +
         '<textarea rows="3" data-script-action="body" placeholder="セリフ本文">' + escapeHtml(line.body) + "</textarea></article>";
     }).join("");
     $("hobbyLineEmpty").hidden = lines.length !== 0;
