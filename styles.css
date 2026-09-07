@@ -656,6 +656,27 @@ p {
   font-size: 11px;
 }
 
+.task-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid rgba(31, 61, 56, 0.11);
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .task-meta-item {
   display: inline-flex;
   align-items: center;
