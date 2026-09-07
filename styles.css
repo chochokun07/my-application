@@ -165,15 +165,23 @@ a:focus-visible {
 
 .brand-mark,
 .auth-mark {
-  display: grid;
-  place-items: center;
   width: 37px;
   height: 37px;
   border-radius: 12px;
+  box-shadow: 0 5px 13px rgba(31, 61, 56, 0.16);
+}
+
+.brand-mark {
+  display: block;
+  object-fit: cover;
+}
+
+.auth-mark {
+  display: grid;
+  place-items: center;
   background: var(--green);
   color: var(--yellow);
   font-size: 19px;
-  box-shadow: 0 5px 13px rgba(31, 61, 56, 0.16);
 }
 
 .brand-overline,
