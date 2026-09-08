@@ -3659,3 +3659,57 @@ select:hover {
     min-width: 680px;
   }
 }
+
+
+/* Research Packet生成中の状態表示 */
+.research-packet-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 2px;
+  padding: 12px 14px;
+  border: 1px solid rgba(61, 153, 108, 0.28);
+  border-radius: 12px;
+  background: rgba(220, 233, 224, 0.58);
+}
+.research-packet-progress-spinner {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 3px solid rgba(31, 61, 56, 0.18);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: research-packet-spin 0.85s linear infinite;
+}
+@keyframes research-packet-spin {
+  to { transform: rotate(360deg); }
+}
+.research-packet-progress-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+.research-packet-progress-copy strong {
+  font-size: 0.86rem;
+}
+.research-packet-progress-copy span {
+  color: var(--muted-dark);
+  font-size: 0.76rem;
+}
+.research-packet-progress time {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .research-packet-progress {
+    align-items: flex-start;
+  }
+  .research-packet-progress time {
+    margin-left: auto;
+  }
+}
