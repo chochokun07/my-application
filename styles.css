@@ -2819,3 +2819,286 @@ select:hover {
   .hobby-project-manage-row { align-items: flex-start; flex-direction: column; }
   .hobby-project-manage-actions { width: 100%; justify-content: flex-end; }
 }
+
+
+/* Global application settings */
+.app-settings-button {
+  flex: 0 0 auto;
+  font-size: 16px;
+}
+
+.app-settings-menu {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+}
+
+.app-settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(27, 39, 35, 0.31);
+  backdrop-filter: blur(6px);
+}
+
+.app-settings-panel {
+  position: absolute;
+  top: 74px;
+  right: clamp(14px, 5vw, 74px);
+  width: min(690px, calc(100vw - 28px));
+  max-height: calc(100vh - 94px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgba(255, 253, 248, 0.65);
+  border-radius: 20px;
+  background: var(--paper);
+  box-shadow: 0 24px 70px rgba(24, 40, 34, 0.25);
+}
+
+.app-settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.app-settings-header h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+}
+
+.app-settings-intro {
+  margin: 12px 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-settings-section {
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 253, 248, 0.6);
+}
+
+.app-settings-section-heading {
+  margin-bottom: 16px;
+}
+
+.app-settings-section-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.app-settings-section-heading p:not(.section-kicker) {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.app-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.app-settings-form label,
+.settings-add-activity label,
+.settings-activity-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-settings-form input,
+.app-settings-form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-settings-form textarea {
+  min-height: 62px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.app-settings-form input:focus,
+.app-settings-form textarea:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(217, 128, 85, 0.12);
+}
+
+.app-settings-field-full {
+  grid-column: 1 / -1;
+}
+
+.settings-activity-list {
+  display: grid;
+  gap: 9px;
+}
+
+.settings-activity-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.settings-activity-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 16px;
+}
+
+.settings-activity-fields {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.7fr) minmax(170px, 1.3fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.settings-activity-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-activity-badge {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.settings-activity-actions .hobby-danger-button {
+  padding: 6px 8px;
+  font-size: 10px;
+}
+
+.settings-add-activity {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.settings-add-activity label {
+  flex: 1;
+}
+
+.settings-add-activity .secondary-button {
+  flex: 0 0 auto;
+  padding: 9px 11px;
+  font-size: 11px;
+}
+
+.settings-help-text,
+.settings-empty {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-empty {
+  padding: 13px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.app-settings-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 17px;
+}
+
+.settings-reset-button {
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-reset-button:hover {
+  color: var(--red);
+}
+
+.custom-activity-pages {
+  width: 100%;
+}
+
+.custom-activity-page .blank-page-panel {
+  min-height: 420px;
+}
+
+.sidebar-heading,
+.auth-heading h1 {
+  white-space: pre-line;
+}
+
+@media (max-width: 680px) {
+  .app-settings-panel {
+    top: 68px;
+    right: 14px;
+    width: calc(100vw - 28px);
+    max-height: calc(100vh - 82px);
+    padding: 17px;
+    border-radius: 17px;
+  }
+
+  .app-settings-section {
+    padding: 14px;
+  }
+
+  .app-settings-fields,
+  .settings-activity-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-activity-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .settings-activity-actions {
+    grid-column: 2;
+    justify-content: space-between;
+  }
+
+  .settings-add-activity {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-add-activity .secondary-button {
+    width: 100%;
+  }
+}
