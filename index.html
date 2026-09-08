@@ -183,7 +183,16 @@
                 <p class="section-kicker">SCHEDULE</p>
                 <h2 id="researchScheduleTitle">予定</h2>
               </div>
-              <button id="addResearchScheduleInlineButton" class="small-action-button" type="button">＋ 追加</button>
+              <div class="research-panel-heading-actions">
+                <label class="research-timeline-range">
+                  表示範囲
+                  <select id="researchScheduleHorizon" aria-label="スケジュールの表示範囲">
+                    <option value="7">1週間</option>
+                    <option value="30">1か月</option>
+                  </select>
+                </label>
+                <button id="addResearchScheduleInlineButton" class="small-action-button" type="button">＋ 追加</button>
+              </div>
             </div>
             <div id="researchScheduleList" class="research-item-list"></div>
             <div id="researchScheduleEmpty" class="research-empty" hidden>
