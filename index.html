@@ -19,7 +19,7 @@
         <button id="sidebarToggle" class="icon-button sidebar-toggle" type="button" aria-controls="appSidebar" aria-expanded="false" aria-label="サイドバーを開く">
           <span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span>
         </button>
-        <a class="brand" href="./" aria-label="My application ホーム">
+        <a class="brand" data-brand-home href="./" aria-label="My application ホーム">
           <img class="brand-mark" src="./assets/icon.png" alt="" />
           <span>
             <span class="brand-overline">PERSONAL PLATFORM</span>
@@ -28,6 +28,7 @@
         </a>
       </div>
       <div class="topbar-actions">
+        <button id="appSettingsButton" class="icon-button app-settings-button" type="button" aria-label="アプリ設定" title="アプリ設定">⚙</button>
         <span id="syncStatus" class="sync-status" data-state="local">この端末のみ</span>
         <button id="accountButton" class="icon-button account-button" type="button" hidden aria-label="アカウントメニュー">
           <span id="accountInitial">M</span>
@@ -39,7 +40,7 @@
 
     <aside id="appSidebar" class="app-sidebar" aria-label="アプリメニュー" aria-hidden="true">
       <div class="sidebar-header">
-        <a class="sidebar-brand" href="./" aria-label="My application ホーム">
+        <a class="sidebar-brand" data-brand-home href="./" aria-label="My application ホーム">
           <img class="brand-mark" src="./assets/icon.png" alt="" />
           <span class="sidebar-brand-title">My application</span>
         </a>
@@ -55,34 +56,16 @@
         <p class="sidebar-section-label">メイン</p>
         <button class="sidebar-nav-item is-active" type="button" data-sidebar-view="home" aria-current="page">
           <span class="sidebar-nav-icon" aria-hidden="true">⌂</span>
-          <span class="sidebar-nav-label">ホーム</span>
+          <span id="homeNavLabel" class="sidebar-nav-label">ホーム</span>
         </button>
         <button class="sidebar-nav-item" type="button" data-sidebar-view="todo">
           <span class="sidebar-nav-icon" aria-hidden="true">✓</span>
-          <span class="sidebar-nav-label">To Do</span>
+          <span id="todoNavLabel" class="sidebar-nav-label">To Do</span>
           <span id="sidebarTodoCount" class="sidebar-nav-count">0</span>
         </button>
 
         <p class="sidebar-section-label">活動</p>
-        <button class="sidebar-nav-item" type="button" data-sidebar-view="hobby">
-          <span class="sidebar-nav-icon sidebar-nav-icon-hobby" aria-hidden="true">✦</span>
-          <span class="sidebar-nav-label">趣味</span>
-        </button>
-        <button class="sidebar-nav-item" type="button" data-sidebar-view="research">
-          <span class="sidebar-nav-icon sidebar-nav-icon-research" aria-hidden="true">⌁</span>
-          <span class="sidebar-nav-label">研究</span>
-        </button>
-        <button class="sidebar-nav-item" type="button" data-sidebar-view="creation">
-          <span class="sidebar-nav-icon sidebar-nav-icon-creative" aria-hidden="true">✎</span>
-          <span class="sidebar-nav-label">創作</span>
-        </button>
-
-        <p class="sidebar-section-label">これから追加</p>
-        <button class="sidebar-nav-item is-disabled" type="button" disabled>
-          <span class="sidebar-nav-icon sidebar-nav-icon-life" aria-hidden="true">◇</span>
-          <span class="sidebar-nav-label">生活</span>
-          <span class="sidebar-nav-badge">準備中</span>
-        </button>
+        <div id="activityNavList" class="sidebar-activity-list"></div>
       </nav>
 
       <div class="sidebar-footer">
@@ -103,12 +86,12 @@
         <section class="hero-section">
           <div>
             <p id="dateLabel" class="section-kicker">TODAY</p>
-            <h1>今日やること</h1>
+            <h1 id="homePageTitle">今日やること</h1>
             <p id="todaySubtitle" class="hero-subtitle">今取り組むタスクをまとめています。</p>
           </div>
           <button id="addTaskButton" class="primary-button" type="button">
             <span class="button-plus">＋</span>
-            <span>タスク追加</span>
+            <span id="taskAddButtonLabel">タスク追加</span>
           </button>
         </section>
 
@@ -162,7 +145,7 @@
           <div>
             <p class="section-kicker">RESEARCH</p>
             <h1 id="researchPageTitle">研究</h1>
-            <p class="page-subtitle">予定・プラン・タスクを、研究の流れに沿ってまとめます。</p>
+            <p id="researchPageSubtitle" class="page-subtitle">予定・プラン・タスクを、研究の流れに沿ってまとめます。</p>
           </div>
           <div class="page-heading-actions">
             <button id="addResearchScheduleButton" class="secondary-button" type="button">＋ 予定を追加</button>
@@ -250,7 +233,7 @@
           <div>
             <p class="section-kicker">HOBBY</p>
             <h1 id="hobbyPageTitle">趣味</h1>
-            <p class="page-subtitle">動画ごとの構想と台本を、同じプロジェクトで管理します。</p>
+            <p id="hobbyPageSubtitle" class="page-subtitle">動画ごとの構想と台本を、同じプロジェクトで管理します。</p>
           </div>
           <div class="page-heading-actions">
             <button id="hobbySettingsButton" class="icon-button hobby-settings-button" type="button" data-hobby-action="open-settings" aria-label="趣味ページの設定">⚙</button>
@@ -433,12 +416,15 @@
           <div>
             <p class="section-kicker">CREATION</p>
             <h1 id="creationPageTitle">創作</h1>
+            <p id="creationPageSubtitle" class="page-subtitle">創作の内容をここで整理します。</p>
           </div>
         </div>
         <div class="blank-page-panel" aria-label="創作ページの内容">
           <div class="blank-page-mark" aria-hidden="true">✎</div>
         </div>
       </section>
+
+      <div id="customActivityPages" class="custom-activity-pages"></div>
     </main>
 
     <section id="authShell" class="auth-shell" hidden>
@@ -473,6 +459,91 @@
     <div id="accountMenu" class="account-menu" hidden>
       <p id="accountEmail" class="account-email"></p>
       <button id="signOutButton" class="menu-button" type="button">ログアウト</button>
+    </div>
+
+    <div id="appSettingsMenu" class="app-settings-menu" hidden>
+      <div class="app-settings-backdrop" data-settings-action="close"></div>
+      <section class="app-settings-panel" role="dialog" aria-modal="true" aria-labelledby="appSettingsTitle">
+        <header class="app-settings-header">
+          <div>
+            <p class="hobby-pane-kicker">APP SETTINGS</p>
+            <h2 id="appSettingsTitle">アプリ設定</h2>
+          </div>
+          <button class="icon-button" type="button" data-settings-action="close" aria-label="設定を閉じる">×</button>
+        </header>
+        <p class="app-settings-intro">アプリ全体の表示と活動項目を整えます。</p>
+
+        <form id="appSettingsForm" class="app-settings-form">
+          <section class="app-settings-section">
+            <div class="app-settings-section-heading">
+              <div>
+                <p class="section-kicker">DISPLAY</p>
+                <h3>表示文言</h3>
+                <p>ヘッダーやホーム画面で使う文言を変更できます。</p>
+              </div>
+            </div>
+            <div class="app-settings-fields">
+              <label>
+                アプリ表示名
+                <input id="settingsAppName" type="text" maxlength="60" required />
+              </label>
+              <label>
+                上部の小見出し
+                <input id="settingsBrandOverline" type="text" maxlength="60" required />
+              </label>
+              <label class="app-settings-field-full">
+                サイドバーのメッセージ
+                <textarea id="settingsSidebarHeading" rows="2" maxlength="100" required></textarea>
+              </label>
+              <label>
+                ホームの見出し
+                <input id="settingsHomeTitle" type="text" maxlength="60" required />
+              </label>
+              <label>
+                タスク追加ボタン
+                <input id="settingsTaskAddLabel" type="text" maxlength="40" required />
+              </label>
+              <label>
+                検索欄のプレースホルダー
+                <input id="settingsTaskSearchPlaceholder" type="text" maxlength="60" required />
+              </label>
+              <label>
+                ホームのナビ名
+                <input id="settingsHomeNavLabel" type="text" maxlength="30" required />
+              </label>
+              <label>
+                To Doのナビ名
+                <input id="settingsTodoNavLabel" type="text" maxlength="30" required />
+              </label>
+            </div>
+          </section>
+
+          <section class="app-settings-section">
+            <div class="app-settings-section-heading">
+              <div>
+                <p class="section-kicker">ACTIVITIES</p>
+                <h3>活動項目</h3>
+                <p>名前と説明を変更できます。追加した活動は空のページとして作成されます。</p>
+              </div>
+            </div>
+            <div id="settingsActivityList" class="settings-activity-list"></div>
+            <div class="settings-add-activity">
+              <label>
+                新しい活動
+                <input id="newActivityName" type="text" maxlength="40" placeholder="例：生活" />
+              </label>
+              <button id="addActivityButton" class="secondary-button" type="button">＋ 活動を追加</button>
+            </div>
+            <p class="settings-help-text">活動を削除しても、その活動に保存済みのデータは削除されません。</p>
+          </section>
+
+          <div class="app-settings-footer">
+            <button id="resetAppSettingsButton" class="settings-reset-button" type="button">初期設定に戻す</button>
+            <span class="action-spacer"></span>
+            <button class="primary-button" type="submit">設定を保存</button>
+          </div>
+        </form>
+      </section>
     </div>
 
     <div id="taskModal" class="modal-backdrop" hidden>
