@@ -337,12 +337,11 @@
   }
 
   function updateSelectionCount() {
-    elements.researchFileSelectionCount.textContent = `選択中 ${state.selectedFiles.size}件`;
+    elements.researchFileSelectionCount.textContent = "選択中 " + state.selectedFiles.size + "件";
     elements.researchPacketSources.textContent = state.selectedFiles.size
-      ? `参照資料：${[...state.selectedFiles].join("、")}`
-      : "参照資料：サーバーが最近の記録を選びます。";
+      ? "手動選択した資料を候補にします：" + [...state.selectedFiles].join("、")
+      : "取得指示に基づき、Lunaが研究フォルダーから資料を選定します。";
   }
-
   async function loadFiles(path = "") {
     elements.researchFilesList.innerHTML = "<p class=\"research-bridge-help\">読み込み中...</p>";
     elements.researchFilePreview.hidden = true;
@@ -409,19 +408,38 @@
   async function createPacket(event) {
     event.preventDefault();
     const problem = elements.researchPacketProblem.value.trim();
+    const selectionInstruction = elements.researchPacketSelectionInstruction.value.trim();
     if (!problem) return;
     elements.researchPacketSubmit.disabled = true;
-    elements.researchPacketSubmit.textContent = "作成中...";
+    elements.researchPacketSubmit.textContent = "資料選定・作成中...";
     try {
       const packet = await api("/api/packets", {
         method: "POST",
         timeout: 190000,
-        body: JSON.stringify({ problem, selected_files: [...state.selectedFiles] }),
+        body: JSON.stringify({
+          problem,
+          selection_instruction: selectionInstruction,
+          selected_files: [...state.selectedFiles],
+        }),
       });
-      if (!packet.id) packet.id = crypto.randomUUID?.() || `packet-${Date.now()}`;
-      state.latestPacket = { ...packet, problem, created_at: packet.created_at || new Date().toISOString() };
+      if (!packet.id) packet.id = crypto.randomUUID?.() || "packet-" + Date.now();
+      state.latestPacket = {
+        ...packet,
+        problem,
+        selection_instruction: selectionInstruction,
+        created_at: packet.created_at || new Date().toISOString(),
+      };
       saveJson(PACKET_KEY, state.latestPacket);
       elements.researchPacketOutput.value = packet.markdown || "";
+      const sourceLabel = packet.selection_method === "luna"
+        ? "Lunaが選定した資料"
+        : packet.selection_method === "manual"
+          ? "手動選択した資料"
+          : "自動選定された資料";
+      const sources = Array.isArray(packet.sources) && packet.sources.length
+        ? packet.sources.join("、")
+        : "資料が見つかりませんでした。";
+      elements.researchPacketSources.textContent = sourceLabel + "：" + sources;
       elements.researchPacketForm.hidden = true;
       elements.researchPacketResult.hidden = false;
       savePacketMetadata(packet, problem).catch(() => {});
@@ -432,7 +450,6 @@
       elements.researchPacketSubmit.textContent = "作成";
     }
   }
-
   async function copyText(value) {
     await navigator.clipboard.writeText(value);
   }
@@ -523,7 +540,7 @@
       "researchServerSettingsModal", "researchSummaryDetailModal", "researchSummaryDetailTitle", "researchSummaryDetailBody", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
       "researchProjectUrl", "researchFilesModal", "researchFilesPath", "researchFilesUpButton",
       "researchFilesReloadButton", "researchFilesList", "researchFilePreview", "researchFileSelectionCount",
-      "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSources",
+      "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSelectionInstruction", "researchPacketSources",
       "researchPacketSubmit", "researchPacketResult", "researchPacketOutput", "researchPacketCopyButton",
       "researchPacketSolButton",
     ].forEach((id) => { elements[id] = $(id); });
