@@ -359,7 +359,7 @@
     const projectIds = new Set(state.projects.map((project) => project.id));
     const missingProjects = LEGACY_SEED.projects
       .filter((project) => !projectIds.has(project.id))
-      .map((project) => ({
+      .map((project, index) => ({
         id: project.id,
         user_id: state.user.id,
         name: project.name,
