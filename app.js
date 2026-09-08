@@ -1401,9 +1401,6 @@
       }
     }
 
-    if ("serviceWorker" in navigator && (window.isSecureContext || location.hostname === "localhost")) {
-      navigator.serviceWorker.register("./sw.js?v=0.2.0", { updateViaCache: "none" }).catch((error) => console.warn("PWA登録に失敗しました", error));
-    }
   }
 
   document.addEventListener("DOMContentLoaded", boot);
