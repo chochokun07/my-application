@@ -37,6 +37,10 @@ MAX_REQUEST_BYTES = 1_000_000
 MAX_PREVIEW_BYTES = 1_500_000
 MAX_DOWNLOAD_BYTES = 100_000_000
 MAX_PACKET_CHARS = 24_000
+MAX_CANDIDATE_FILES = 240
+CANDIDATE_EXCERPT_CHARS = 300
+DETAIL_EXCERPT_CHARS = 900
+COARSE_SELECTION_LIMIT = 20
 
 
 def utc_iso(timestamp: float | None = None) -> str:
@@ -170,6 +174,27 @@ class ResearchRepository:
             "updated_at": utc_iso(path.stat().st_mtime),
         }
 
+    @staticmethod
+    def excerpt_sections(text: str, size: int = CANDIDATE_EXCERPT_CHARS) -> dict[str, str]:
+        cleaned = str(text or "").replace("\r\n", "\n").strip()
+        if not cleaned:
+            return {"beginning": "", "middle": "", "ending": ""}
+        if len(cleaned) <= size:
+            return {"beginning": cleaned, "middle": "", "ending": ""}
+        if len(cleaned) <= size * 3:
+            third = max(1, len(cleaned) // 3)
+            return {
+                "beginning": cleaned[:third].strip(),
+                "middle": cleaned[third:third * 2].strip(),
+                "ending": cleaned[third * 2:].strip(),
+            }
+        middle_start = (len(cleaned) - size) // 2
+        return {
+            "beginning": cleaned[:size].strip(),
+            "middle": cleaned[middle_start:middle_start + size].strip(),
+            "ending": cleaned[-size:].strip(),
+        }
+
     def packet_candidates(self) -> list[dict]:
         candidates: list[dict] = []
         for path in self.root.rglob("*"):
@@ -180,19 +205,40 @@ class ResearchRepository:
                 stat = path.stat()
                 if stat.st_size > MAX_PREVIEW_BYTES:
                     continue
-                preview = path.read_text(encoding="utf-8", errors="replace")[:500]
+                text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            hint = next((line.strip("# ").strip() for line in preview.splitlines() if line.strip()), "")
+            sections = self.excerpt_sections(text)
+            hint = next((line.strip("# ").strip() for line in sections["beginning"].splitlines() if line.strip()), "")
             candidates.append({
                 "path": relative.as_posix(),
                 "name": path.name,
                 "size": stat.st_size,
                 "modified_at": utc_iso(stat.st_mtime),
                 "hint": hint[:180],
+                "beginning": sections["beginning"],
+                "middle": sections["middle"],
+                "ending": sections["ending"],
             })
-        candidates.sort(key=lambda item: item["modified_at"], reverse=True)
-        return candidates[:240]
+        candidates.sort(key=lambda item: item["path"].lower())
+        return candidates[:MAX_CANDIDATE_FILES]
+
+    def detailed_packet_candidates(self, paths: list[str], candidates: list[dict]) -> list[dict]:
+        candidate_by_path = {item["path"]: item for item in candidates}
+        detailed: list[dict] = []
+        for relative in paths[:COARSE_SELECTION_LIMIT]:
+            base = candidate_by_path.get(relative)
+            if not base:
+                continue
+            try:
+                text = self.read_text(relative)
+            except (FileNotFoundError, ValueError, OSError):
+                continue
+            detailed.append({
+                **base,
+                **self.excerpt_sections(text, DETAIL_EXCERPT_CHARS),
+            })
+        return detailed
 
     def run_packet_command(self, prompt: str) -> str:
         command = self.config["packet_command"]
@@ -214,24 +260,64 @@ class ResearchRepository:
         except (OSError, subprocess.SubprocessError):
             return ""
 
-    def selection_prompt(self, problem: str, instruction: str, candidates: list[dict], preferred: list[str]) -> str:
-        candidate_lines = "\n".join(json.dumps(item, ensure_ascii=False) for item in candidates)
+    def selection_prompt(
+        self,
+        problem: str,
+        instruction: str,
+        candidates: list[dict],
+        preferred: list[str],
+        *,
+        stage: str = "final",
+    ) -> str:
+        candidate_lines = "\n".join(
+            json.dumps(item, ensure_ascii=False, separators=(",", ":"))
+            for item in candidates
+        )
         preferred_text = "、".join(preferred[:12]) or "なし"
+        is_coarse = stage == "coarse"
+        limit = COARSE_SELECTION_LIMIT if is_coarse else 12
+        stage_instruction = (
+            "これは第1段階の粗選定です。本文抜粋を比較し、最終候補になり得る資料を最大20件まで選択してください。"
+            if is_coarse
+            else "これは最終選定です。本文抜粋を比較し、Research Packetに使用する資料を最大12件まで選択してください。"
+        )
         return (
-            "あなたは研究資料の選定担当です。\n"
-            "ユーザーの指示と今回考えたい問題に基づき、Research Packet作成に必要な資料だけを選んでください。\n"
-            "候補一覧に存在するpathだけを使い、最大12件まで選んでください。\n"
-            "出力はJSON配列のみとし、説明文やMarkdownは付けないでください。\n"
+            "あなたは研究資料の選定担当です。\n\n"
+            "目的は、今回の研究上の問題を検討するために必要な資料を、候補一覧から選ぶことです。\n\n"
+            "単に更新日時が新しい資料や、問題文と同じ単語を含む資料を優先してはいけません。\n\n"
+            "以下の観点で候補を評価してください。\n"
+            "1. 今回の問題に直接関係する実験事実を含むか\n"
+            "2. 現在の研究目的・研究方針を理解するために必要か\n"
+            "3. 過去の解釈・仮説・議論を確認するために必要か\n"
+            "4. 比較対象、反例、別条件の結果など、異なる解釈を検討するために必要か\n"
+            "5. 最近の結果だけでは判断できない場合、過去の重要資料を補う必要があるか\n\n"
+            "ファイル名やpathだけでは内容を断定してはいけません。\n"
+            "候補一覧に含まれる本文抜粋を確認した上で判断してください。\n\n"
+            "Research Packetが一方向の情報だけで構成されないよう、必要に応じて以下を含めてください。\n"
+            "- 研究目的または全体方針\n"
+            "- 関連する実験事実\n"
+            "- 現在または過去の解釈\n"
+            "- 比較・対照に使える資料\n"
+            "- 今回の問題に直結する最近の記録\n\n"
+            f"{stage_instruction}\n"
+            "候補一覧に存在するpathのみ使用してください。\n"
+            f"選択数の上限は{limit}件です。\n"
+            "出力はJSON配列のみとしてください。\n"
+            "説明文やMarkdownは付けないでください。\n"
             '出力例: ["knowledge/example.md"]\n\n'
             f"今回考えたい問題:\n{problem}\n\n"
             f"資料の取得指示:\n{instruction}\n\n"
             f"手動選択された候補:\n{preferred_text}\n\n"
-            "候補一覧（path、ファイル名、サイズ、更新日時、冒頭の見出し）:\n"
+            "候補一覧（path、ファイル名、サイズ、更新日時、冒頭の見出し、本文の冒頭・中央・末尾の抜粋）:\n"
             f"{candidate_lines}"
         )
 
     @staticmethod
-    def parse_selected_files(output: str, candidates: list[dict]) -> list[str]:
+    def parse_selected_files(
+        output: str,
+        candidates: list[dict],
+        limit: int = 12,
+    ) -> list[str]:
         allowed = {item["path"] for item in candidates}
         cleaned = re.sub(r"^\x60{3}(?:json)?\s*|\s*\x60{3}$", "", output.strip(), flags=re.IGNORECASE | re.DOTALL)
         parsed = None
@@ -254,7 +340,7 @@ class ResearchRepository:
             value = str(value or "").replace("\\", "/").lstrip("/")
             if value in allowed and value not in selected:
                 selected.append(value)
-        return selected[:12]
+        return selected[:max(1, int(limit))]
 
     def choose_packet_files(
         self,
@@ -264,12 +350,36 @@ class ResearchRepository:
     ) -> tuple[list[str], str]:
         if selection_instruction and self.config["packet_command"]:
             candidates = self.packet_candidates()
-            selection_output = self.run_packet_command(
-                self.selection_prompt(problem, selection_instruction, candidates, requested)
-            )
-            selected = self.parse_selected_files(selection_output, candidates)
-            if selected:
-                return selected, "luna"
+            if candidates:
+                coarse_output = self.run_packet_command(
+                    self.selection_prompt(
+                        problem,
+                        selection_instruction,
+                        candidates,
+                        requested,
+                        stage="coarse",
+                    )
+                )
+                coarse_selected = self.parse_selected_files(
+                    coarse_output,
+                    candidates,
+                    limit=COARSE_SELECTION_LIMIT,
+                )
+                if coarse_selected:
+                    detailed_candidates = self.detailed_packet_candidates(coarse_selected, candidates)
+                    if detailed_candidates:
+                        final_output = self.run_packet_command(
+                            self.selection_prompt(
+                                problem,
+                                selection_instruction,
+                                detailed_candidates,
+                                requested,
+                                stage="final",
+                            )
+                        )
+                        selected = self.parse_selected_files(final_output, detailed_candidates)
+                        if selected:
+                            return selected, "luna"
 
         chosen: list[str] = []
         for relative in requested[:12]:
