@@ -44,6 +44,8 @@ DETAIL_EXCERPT_CHARS = 900
 COARSE_SELECTION_LIMIT = 20
 COARSE_PRIMARY_LIMIT = 14
 COARSE_SECONDARY_LIMIT = COARSE_SELECTION_LIMIT - COARSE_PRIMARY_LIMIT
+PRIMARY_SHORTLIST_LIMIT = 60
+SECONDARY_SHORTLIST_LIMIT = 12
 PAPER_SUMMARY_FILENAMES = ("要約.md", "summary.md")
 
 
@@ -308,7 +310,26 @@ class ResearchRepository:
                 item["path"].lower(),
             )
         )
-        return candidates[:MAX_CANDIDATE_FILES]
+        # Priority requests are ranked before the Luna prompt, so do not discard
+        # an entire class merely because the alphabetically first class is large.
+        return candidates if preferred_roots else candidates[:MAX_CANDIDATE_FILES]
+
+    def ranked_packet_candidates(self, candidates: list[dict], problem: str, limit: int) -> list[dict]:
+        query = str(problem or "").lower()
+        pieces = [piece for piece in re.split(r"[^a-z0-9ぁ-んァ-ン一-龯]+", query) if len(piece) >= 2]
+        terms = set(pieces)
+        for piece in pieces:
+            if any("ぁ" <= char <= "龯" for char in piece):
+                for size in range(2, min(8, len(piece)) + 1):
+                    terms.update(piece[index:index + size] for index in range(len(piece) - size + 1))
+
+        def score(item: dict) -> tuple[int, str, str]:
+            text = " ".join(
+                str(item.get(key, "")) for key in ("name", "hint", "beginning", "middle", "ending")
+            ).lower()
+            return (sum(text.count(term) for term in terms), item.get("modified_at", ""), item["path"])
+
+        return sorted(candidates, key=score, reverse=True)[:max(1, limit)]
 
     def detailed_packet_candidates(self, paths: list[str], candidates: list[dict]) -> list[dict]:
         candidate_by_path = {item["path"]: item for item in candidates}
@@ -327,9 +348,16 @@ class ResearchRepository:
             })
         return detailed
 
-    def run_packet_command(self, prompt: str) -> str:
+    def run_packet_command(
+        self,
+        prompt: str,
+        trace: dict | None = None,
+        stage: str = "",
+    ) -> str:
         command = self.config["packet_command"]
         if not command:
+            if trace is not None:
+                trace.setdefault("luna_calls", []).append({"stage": stage, "status": "not-configured"})
             return ""
         command_parts = shlex.split(command, posix=os.name != "nt")
         if os.name == "nt" and command_parts:
@@ -341,6 +369,7 @@ class ResearchRepository:
                     resolved = str(npm_codex)
             if resolved:
                 command_parts[0] = resolved
+        sys.stderr.write(f"[Research Packet] Luna start: {stage or 'packet-command'}\n")
         try:
             completed = subprocess.run(
                 command_parts,
@@ -353,11 +382,23 @@ class ResearchRepository:
                 check=True,
                 cwd=self.root,
             )
-            return completed.stdout.strip()
+            output = completed.stdout.strip()
+            sys.stderr.write(f"[Research Packet] Luna finished: {stage or 'packet-command'} ({len(output)} chars)\n")
+            if trace is not None:
+                trace.setdefault("luna_calls", []).append({
+                    "stage": stage,
+                    "status": "ok",
+                    "response": output,
+                })
+            return output
         except subprocess.CalledProcessError as error:
-            sys.stderr.write(f"[Research Packet] packet_command failed: {error.stderr[-2000:]}\n")
+            detail = error.stderr[-2000:]
+            sys.stderr.write(f"[Research Packet] packet_command failed: {detail}\n")
         except (OSError, subprocess.TimeoutExpired) as error:
-            sys.stderr.write(f"[Research Packet] packet_command could not run: {error}\n")
+            detail = str(error)
+            sys.stderr.write(f"[Research Packet] packet_command could not run: {detail}\n")
+        if trace is not None:
+            trace.setdefault("luna_calls", []).append({"stage": stage, "status": "failed", "error": detail})
         return ""
 
     def selection_prompt(
@@ -467,75 +508,97 @@ class ResearchRepository:
         requested: list[str],
         problem: str = "",
         selection_instruction: str = "",
-    ) -> tuple[list[str], str]:
+    ) -> tuple[list[str], str, dict]:
         preferred_roots = self.preferred_roots_from_instruction(selection_instruction)
         priority_requested = bool(preferred_roots)
+        trace: dict = {
+            "preferred_roots": preferred_roots,
+            "primary_candidate_count": 0,
+            "secondary_candidate_count": 0,
+            "selected_files": [],
+        }
 
         if selection_instruction and self.config["packet_command"]:
             candidates = self.packet_candidates(preferred_roots)
             primary_candidates = [item for item in candidates if item.get("candidate_class") == "primary"]
             secondary_candidates = [item for item in candidates if item.get("candidate_class") != "primary"]
+            trace["primary_candidate_count"] = len(primary_candidates)
+            trace["secondary_candidate_count"] = len(secondary_candidates)
+
+            if priority_requested and primary_candidates:
+                # Server-side ranking bounds the prompt; Luna makes one final relevance decision.
+                primary_shortlist = self.ranked_packet_candidates(
+                    primary_candidates, problem, PRIMARY_SHORTLIST_LIMIT,
+                )
+                secondary_shortlist = self.ranked_packet_candidates(
+                    secondary_candidates, problem, SECONDARY_SHORTLIST_LIMIT,
+                ) if secondary_candidates else []
+                selection_candidates = primary_shortlist + secondary_shortlist
+                trace["primary_shortlist"] = [item["path"] for item in primary_shortlist]
+                trace["secondary_shortlist"] = [item["path"] for item in secondary_shortlist]
+
+                final_output = self.run_packet_command(
+                    self.selection_prompt(
+                        problem, selection_instruction, selection_candidates, requested, stage="final",
+                    ),
+                    trace,
+                    "priority-selection",
+                )
+                selected = self.parse_selected_files(final_output, selection_candidates)
+                if selected and self.selection_respects_priority(selected, selection_candidates):
+                    trace["selected_files"] = selected
+                    return selected, "luna", trace
+                if selected:
+                    retry_output = self.run_packet_command(
+                        self.selection_prompt(
+                            problem, selection_instruction, selection_candidates, requested,
+                            stage="final", force_primary=True,
+                        ),
+                        trace,
+                        "priority-retry",
+                    )
+                    retried = self.parse_selected_files(retry_output, selection_candidates)
+                    if retried and self.selection_respects_priority(retried, selection_candidates):
+                        trace["selected_files"] = retried
+                        return retried, "luna-retry", trace
+                selected = self.fallback_candidate_paths(primary_shortlist, 12)
+                trace["selected_files"] = selected
+                return selected, "priority-fallback", trace
+
             if candidates:
-                if priority_requested and primary_candidates:
-                    # Coarse selection is split so a first Luna decision cannot remove all primary sources.
-                    primary_output = self.run_packet_command(
-                        self.selection_prompt(
-                            problem, selection_instruction, primary_candidates, requested,
-                            stage="coarse", limit=COARSE_PRIMARY_LIMIT,
-                        )
-                    )
-                    primary_selected = self.parse_selected_files(
-                        primary_output, primary_candidates, limit=COARSE_PRIMARY_LIMIT,
-                    ) or self.fallback_candidate_paths(primary_candidates, COARSE_PRIMARY_LIMIT)
-
-                    secondary_output = self.run_packet_command(
-                        self.selection_prompt(
-                            problem, selection_instruction, secondary_candidates, requested,
-                            stage="coarse", limit=COARSE_SECONDARY_LIMIT,
-                        )
-                    ) if secondary_candidates else ""
-                    secondary_selected = self.parse_selected_files(
-                        secondary_output, secondary_candidates, limit=COARSE_SECONDARY_LIMIT,
-                    )
-                    coarse_selected = list(dict.fromkeys(primary_selected + secondary_selected))
-                else:
-                    coarse_output = self.run_packet_command(
-                        self.selection_prompt(
-                            problem, selection_instruction, candidates, requested, stage="coarse",
-                        )
-                    )
-                    coarse_selected = self.parse_selected_files(
-                        coarse_output, candidates, limit=COARSE_SELECTION_LIMIT,
-                    )
-
+                coarse_output = self.run_packet_command(
+                    self.selection_prompt(problem, selection_instruction, candidates, requested, stage="coarse"),
+                    trace,
+                    "coarse-selection",
+                )
+                coarse_selected = self.parse_selected_files(
+                    coarse_output, candidates, limit=COARSE_SELECTION_LIMIT,
+                )
                 if coarse_selected:
                     detailed_candidates = self.detailed_packet_candidates(coarse_selected, candidates)
                     if detailed_candidates:
                         final_output = self.run_packet_command(
                             self.selection_prompt(
                                 problem, selection_instruction, detailed_candidates, requested, stage="final",
-                            )
+                            ),
+                            trace,
+                            "final-selection",
                         )
                         selected = self.parse_selected_files(final_output, detailed_candidates)
-                        if selected and self.selection_respects_priority(selected, detailed_candidates):
-                            return selected, "luna"
-                        if selected and priority_requested:
-                            retry_output = self.run_packet_command(
-                                self.selection_prompt(
-                                    problem, selection_instruction, detailed_candidates, requested,
-                                    stage="final", force_primary=True,
-                                )
-                            )
-                            retried = self.parse_selected_files(retry_output, detailed_candidates)
-                            if retried and self.selection_respects_priority(retried, detailed_candidates):
-                                return retried, "luna-retry"
+                        if selected:
+                            trace["selected_files"] = selected
+                            return selected, "luna", trace
 
-        # Explicit directory priorities remain enforced even when Luna cannot provide a usable result.
         if priority_requested:
             priority_candidates = self.packet_candidates(preferred_roots)
             primary_candidates = [item for item in priority_candidates if item.get("candidate_class") == "primary"]
+            trace["primary_candidate_count"] = len(primary_candidates)
             if primary_candidates:
-                return self.fallback_candidate_paths(primary_candidates, 12), "priority-fallback"
+                selected = self.fallback_candidate_paths(
+                    self.ranked_packet_candidates(primary_candidates, problem, PRIMARY_SHORTLIST_LIMIT), 12,
+                )
+                trace["selected_files"] = selected
+                return selected, "priority-fallback", trace
 
         chosen: list[str] = []
         for relative in requested[:12]:
@@ -546,7 +609,9 @@ class ResearchRepository:
             except (FileNotFoundError, ValueError):
                 continue
         if chosen:
-            return list(dict.fromkeys(chosen)), "manual"
+            selected = list(dict.fromkeys(chosen))
+            trace["selected_files"] = selected
+            return selected, "manual", trace
 
         state_path = self.config["state_file"]
         goal_path = self.config["goal_file"]
@@ -557,7 +622,9 @@ class ResearchRepository:
             except FileNotFoundError:
                 pass
         chosen.extend(record["path"] for record in self.recent_records(4))
-        return list(dict.fromkeys(chosen))[:8], "automatic"
+        selected = list(dict.fromkeys(chosen))[:8]
+        trace["selected_files"] = selected
+        return selected, "automatic", trace
 
     def packet_prompt(self, problem: str, files: list[str]) -> str:
         extracts = []
@@ -619,23 +686,30 @@ class ResearchRepository:
         requested: list[str],
         selection_instruction: str = "",
     ) -> dict:
-        files, selection_method = self.choose_packet_files(
+        files, selection_method, selection_trace = self.choose_packet_files(
             requested,
             problem=problem,
             selection_instruction=selection_instruction,
         )
         prompt = self.packet_prompt(problem, files)
-        markdown = self.run_packet_command(prompt)
+        markdown = self.run_packet_command(prompt, selection_trace, "packet-generation")
         generated_by = "local-server extraction"
         if markdown:
             generated_by = "Work / Luna"
         if not markdown:
             markdown = self.fallback_packet(problem, files)
+        selection_trace["final_packet_files"] = files
+        sys.stderr.write(
+            "[Research Packet] selection_trace "
+            + json.dumps(selection_trace, ensure_ascii=False)
+            + "\n"
+        )
         return {
             "id": str(uuid.uuid4()),
             "markdown": markdown,
             "sources": files,
             "selection_method": selection_method,
+            "selection_trace": selection_trace,
             "selection_instruction": selection_instruction,
             "generated_by": generated_by,
             "created_at": utc_iso(),
