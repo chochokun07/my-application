@@ -10,9 +10,10 @@
   const TABLE_NAME = "tasks";
   const RESEARCH_PLANS_TABLE = "research_plans";
   const RESEARCH_SCHEDULES_TABLE = "research_schedules";
-  const TASK_SELECT_FIELDS = "id, title, memo, status, due_date, priority, tags, is_research, research_plan_id, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
+  const TASK_SELECT_FIELDS = "id, title, memo, research_report, status, due_date, priority, tags, is_research, research_plan_id, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
   const LEGACY_TASK_SELECT_FIELDS = "id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
-  const PLAN_SELECT_FIELDS = "id, title, objective, status, target_date, next_action, notes, created_at, updated_at";
+  const PLAN_SELECT_FIELDS = "id, title, objective, origin_facts, hypothesis, hypothesis_basis, status, target_date, next_action, notes, created_at, updated_at";
+  const LEGACY_PLAN_SELECT_FIELDS = "id, title, objective, status, target_date, next_action, notes, created_at, updated_at";
   const SCHEDULE_SELECT_FIELDS = "id, title, scheduled_at, kind, plan_id, notes, created_at, updated_at";
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
@@ -63,8 +64,10 @@
     editingTaskId: null,
     editingPlanId: null,
     editingScheduleId: null,
+    editingResearchTaskId: null,
     researchRemoteAvailable: true,
     researchTaskSchemaAvailable: true,
+    researchPlanSchemaAvailable: true,
     researchDataError: "",
     toastTimer: null,
   };
@@ -196,6 +199,21 @@
     researchScheduleKind: $("researchScheduleKind"),
     researchSchedulePlan: $("researchSchedulePlan"),
     researchScheduleNotes: $("researchScheduleNotes"),
+     researchTaskDetailModal: $("researchTaskDetailModal"),
+     researchTaskDetailTitle: $("researchTaskDetailTitle"),
+     researchTaskDetailForm: $("researchTaskDetailForm"),
+     researchTaskDetailName: $("researchTaskDetailName"),
+     researchTaskDetailMemo: $("researchTaskDetailMemo"),
+     researchTaskDetailReport: $("researchTaskDetailReport"),
+     researchTaskDetailStatus: $("researchTaskDetailStatus"),
+     researchTaskDetailPlan: $("researchTaskDetailPlan"),
+     researchTaskDetailDueDate: $("researchTaskDetailDueDate"),
+     researchTaskDetailPriority: $("researchTaskDetailPriority"),
+     researchTaskDetailContext: $("researchTaskDetailContext"),
+     closeResearchTaskDetail: $("closeResearchTaskDetail"),
+     cancelResearchTaskDetail: $("cancelResearchTaskDetail"),
+     deleteResearchTaskDetail: $("deleteResearchTaskDetail"),
+     completeResearchTaskDetail: $("completeResearchTaskDetail"),
     closeResearchScheduleModal: $("closeResearchScheduleModal"),
     cancelResearchScheduleButton: $("cancelResearchScheduleButton"),
     deleteResearchScheduleButton: $("deleteResearchScheduleButton"),
@@ -344,6 +362,7 @@
       id: task.id || createId(),
       title: String(task.title || "").trim(),
       memo: String(task.memo ?? ""),
+      researchReport: String(task.research_report ?? task.researchReport ?? ""),
       tags,
       isResearch: legacyResearch,
       researchPlanId: task.research_plan_id ?? task.researchPlanId ?? "",
@@ -362,6 +381,7 @@
     const payload = {
       title: task.title,
       memo: task.memo || null,
+      research_report: task.researchReport || null,
       tags: task.tags,
       is_research: Boolean(task.isResearch),
       research_plan_id: task.researchPlanId || null,
@@ -376,6 +396,7 @@
     if (!state.researchTaskSchemaAvailable) {
       delete payload.is_research;
       delete payload.research_plan_id;
+      delete payload.research_report;
     }
     return payload;
   }
@@ -385,6 +406,9 @@
       id: plan.id || createId(),
       title: String(plan.title || "").trim(),
       objective: String(plan.objective ?? ""),
+      originFacts: String(plan.origin_facts ?? plan.originFacts ?? ""),
+      hypothesis: String(plan.hypothesis ?? ""),
+      hypothesisBasis: String(plan.hypothesis_basis ?? plan.hypothesisBasis ?? ""),
       status: PLAN_STATUS_LABELS[plan.status] ? plan.status : "active",
       targetDate: plan.target_date ?? plan.targetDate ?? "",
       nextAction: String(plan.next_action ?? plan.nextAction ?? ""),
@@ -411,12 +435,21 @@
     return {
       title: plan.title,
       objective: plan.objective || null,
+      origin_facts: plan.originFacts || null,
+      hypothesis: plan.hypothesis || null,
+      hypothesis_basis: plan.hypothesisBasis || null,
       status: plan.status,
       target_date: plan.targetDate || null,
       next_action: plan.nextAction || null,
       notes: plan.notes || null,
       user_id: state.user.id,
     };
+    if (!state.researchPlanSchemaAvailable) {
+      delete payload.origin_facts;
+      delete payload.hypothesis;
+      delete payload.hypothesis_basis;
+    }
+    return payload;
   }
 
   function toScheduleDatabasePayload(schedule) {
@@ -1022,7 +1055,9 @@
 
   function isMissingResearchColumn(error) {
     const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
-    return message.includes("research_plan_id") || message.includes("is_research");
+    return message.includes("research_plan_id") || message.includes("is_research")
+      || message.includes("research_report") || message.includes("origin_facts")
+      || message.includes("hypothesis_basis") || message.includes("hypothesis");
   }
 
   function isMissingResearchTable(error) {
@@ -1192,22 +1227,60 @@
 
   function renderResearchPlan(plan) {
     const planTasks = state.tasks.filter((task) => task.researchPlanId === plan.id);
-    const openTaskCount = planTasks.filter((task) => task.status !== "completed").length;
-    const objective = plan.objective || "目的はまだ記録されていません。";
-    const nextAction = plan.nextAction || "次にやることは未設定です。";
+    const openTasks = sortActivityTasks(planTasks.filter((task) => task.status !== "completed"));
+    const completedTaskCount = planTasks.filter((task) => task.status === "completed").length;
+    const originQuestion = plan.objective || "解決したい疑問点はまだ記録されていません。";
+    const originFacts = plan.originFacts || "確認されている事実・根拠はまだ記録されていません。";
+    const hypothesis = plan.hypothesis || "仮説はまだ記録されていません。";
+    const hypothesisBasis = plan.hypothesisBasis || "仮説の根拠はまだ記録されていません。";
+    const taskList = openTasks.length
+      ? openTasks.map((task) => ${{
+          <button class="research-plan-task" type="button" data-research-action="open-task" data-task-id="${{escapeHtml(task.id)}">
+            <span class="research-plan-task-status" aria-hidden="true"></span>
+            <span class="research-plan-task-title">${{escapeHtml(task.title)}</span>
+            <span class="research-plan-task-arrow" aria-hidden="true">→</span>
+          </button>
+        }).join("")
+      : '<p class="research-plan-task-empty">未完了の進捗タスクはありません。</p>';
 
-    return `
-      <article class="research-plan-item" data-plan-id="${escapeHtml(plan.id)}">
+    return ${{
+      <article class="research-plan-item" data-plan-id="${{escapeHtml(plan.id)}">
         <div class="research-item-body">
           <div class="research-item-title-row">
-            <h3>${escapeHtml(plan.title)}</h3>
-            <span class="status-chip research-status-${escapeHtml(plan.status)}">${escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
+            <h3>${{escapeHtml(plan.title)}</h3>
+            <span class="status-chip research-status-${{escapeHtml(plan.status)}">${{escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
           </div>
-          <p class="research-item-description">${escapeHtml(objective)}</p>
-          <p class="research-next-action"><span>次にやること</span>${escapeHtml(nextAction)}</p>
-          <div class="research-item-meta">
-            <span>${escapeHtml(formatTargetDate(plan.targetDate))}</span>
-            <span>未完了タスク ${openTaskCount}件</span>
+          <div class="research-plan-sections">
+            <section class="research-plan-section">
+              <span class="research-plan-section-label">発端｜解決したい疑問点</span>
+              <p>${{escapeHtml(originQuestion)}</p>
+            </section>
+            <section class="research-plan-section">
+              <span class="research-plan-section-label">発端｜確認されている事実・根拠</span>
+              <p>${{escapeHtml(originFacts)}</p>
+            </section>
+            <section class="research-plan-section">
+              <span class="research-plan-section-label">仮説</span>
+              <p>${{escapeHtml(hypothesis)}</p>
+            </section>
+            <section class="research-plan-section">
+              <span class="research-plan-section-label">仮説の根拠</span>
+              <p>${{escapeHtml(hypothesisBasis)}</p>
+            </section>
+          </div>
+          <div class="research-plan-progress">
+            <div class="research-plan-progress-heading">
+              <div>
+                <span class="research-plan-section-label">進捗タスク</span>
+                <strong>${{openTasks.length}件が進行中</strong>
+              </div>
+              <button class="small-action-button" type="button" data-research-action="add-plan-task">＋ タスク追加</button>
+            </div>
+            <div class="research-plan-task-list">${{taskList}</div>
+            <div class="research-item-meta">
+              <span>${{escapeHtml(formatTargetDate(plan.targetDate))}</span>
+              <span>完了済み ${{completedTaskCount}件</span>
+            </div>
           </div>
         </div>
         <div class="research-item-actions">
@@ -1316,8 +1389,8 @@
 
     const noticeMessages = [];
     if (state.mode === "remote" && !state.researchRemoteAvailable) noticeMessages.push(researchSetupMessage());
-    if (state.mode === "remote" && !state.researchTaskSchemaAvailable) {
-      noticeMessages.push("研究プランとの紐付けには、最新のsupabase/schema.sqlの実行が必要です。タグによるページ振り分けは利用できます。");
+    if (state.mode === "remote" && (!state.researchTaskSchemaAvailable || !state.researchPlanSchemaAvailable)) {
+      noticeMessages.push("研究プランの構造化項目・レポート保存には、最新のsupabase/schema.sqlをSupabaseのSQL Editorで実行してください。");
     }
     elements.researchDataNotice.hidden = noticeMessages.length === 0;
     elements.researchDataNoticeText.textContent = noticeMessages.join(" ");
@@ -1415,16 +1488,21 @@
 
   async function loadRemoteResearchData() {
     try {
-      const [plansResult, schedulesResult] = await Promise.all([
-        supabaseClient
+      let plansResult = await supabaseClient
+        .from(RESEARCH_PLANS_TABLE)
+        .select(state.researchPlanSchemaAvailable ? PLAN_SELECT_FIELDS : LEGACY_PLAN_SELECT_FIELDS)
+        .order("updated_at", { ascending: false });
+      if (plansResult.error && state.researchPlanSchemaAvailable && isMissingResearchColumn(plansResult.error)) {
+        state.researchPlanSchemaAvailable = false;
+        plansResult = await supabaseClient
           .from(RESEARCH_PLANS_TABLE)
-          .select(PLAN_SELECT_FIELDS)
-          .order("updated_at", { ascending: false }),
-        supabaseClient
-          .from(RESEARCH_SCHEDULES_TABLE)
-          .select(SCHEDULE_SELECT_FIELDS)
-          .order("scheduled_at", { ascending: true }),
-      ]);
+          .select(LEGACY_PLAN_SELECT_FIELDS)
+          .order("updated_at", { ascending: false });
+      }
+      const schedulesResult = await supabaseClient
+        .from(RESEARCH_SCHEDULES_TABLE)
+        .select(SCHEDULE_SELECT_FIELDS)
+        .order("scheduled_at", { ascending: true });
       if (plansResult.error) throw plansResult.error;
       if (schedulesResult.error) throw schedulesResult.error;
       state.plans = (plansResult.data || []).map(normalizePlan);
@@ -1521,6 +1599,7 @@
       id: state.editingTaskId || createId(),
       title: elements.taskTitle.value.trim(),
       memo: elements.taskMemo.value.trim(),
+      researchReport: existing?.researchReport || "",
       tags,
       isResearch: hasTag(tags, getActivityTagLabel("research")) || Boolean(researchPlanId),
       researchPlanId,
@@ -1624,7 +1703,7 @@
   }
 
   function updateResearchPlanSelectors() {
-    [elements.taskResearchPlan, elements.researchSchedulePlan].forEach((select) => {
+    [elements.taskResearchPlan, elements.researchSchedulePlan, elements.researchTaskDetailPlan].forEach((select) => {
       const selectedId = select.value;
       select.innerHTML = "";
       const noPlanOption = document.createElement("option");
@@ -1658,6 +1737,22 @@
     });
   }
 
+  async function runRemotePlanMutation(plan, operation) {
+    const execute = () => {
+      const query = operation === "update"
+        ? supabaseClient.from(RESEARCH_PLANS_TABLE).update(toPlanDatabasePayload(plan)).eq("id", plan.id)
+        : supabaseClient.from(RESEARCH_PLANS_TABLE).insert(toPlanDatabasePayload(plan));
+      return query.select(state.researchPlanSchemaAvailable ? PLAN_SELECT_FIELDS : LEGACY_PLAN_SELECT_FIELDS).single();
+    };
+    let result = await execute();
+    if (result.error && state.researchPlanSchemaAvailable && isMissingResearchColumn(result.error)) {
+      state.researchPlanSchemaAvailable = false;
+      result = await execute();
+    }
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
   async function saveResearchPlan(event) {
     event.preventDefault();
     if (!elements.researchPlanForm.reportValidity()) return;
@@ -1674,11 +1769,7 @@
         writeLocalResearchData();
       } else {
         if (!state.researchRemoteAvailable) throw new Error(researchSetupMessage());
-        const result = isEditing
-          ? await supabaseClient.from(RESEARCH_PLANS_TABLE).update(toPlanDatabasePayload(plan)).eq("id", plan.id).select(PLAN_SELECT_FIELDS).single()
-          : await supabaseClient.from(RESEARCH_PLANS_TABLE).insert(toPlanDatabasePayload(plan)).select(PLAN_SELECT_FIELDS).single();
-        if (result.error) throw result.error;
-        const savedPlan = normalizePlan(result.data);
+        const savedPlan = normalizePlan(await runRemotePlanMutation(plan, isEditing ? "update" : "insert"));
         if (isEditing) {
           const index = state.plans.findIndex((item) => item.id === plan.id);
           if (index >= 0) state.plans[index] = savedPlan;
@@ -1747,6 +1838,104 @@
     } catch (error) {
       showToast(toFriendlyError(error), true);
     }
+  }
+
+  function openResearchTaskDetail(task = null, options = {}) {
+    state.editingResearchTaskId = task?.id || null;
+    const planId = task?.researchPlanId || options.researchPlanId || "";
+    elements.researchTaskDetailTitle.textContent = task ? "進捗タスクを管理" : "進捗タスクを追加";
+    elements.researchTaskDetailName.value = task?.title || "";
+    elements.researchTaskDetailMemo.value = task?.memo || "";
+    elements.researchTaskDetailReport.value = task?.researchReport || "";
+    elements.researchTaskDetailStatus.value = task?.status || "todo";
+    elements.researchTaskDetailDueDate.value = task?.dueDate || "";
+    elements.researchTaskDetailPriority.value = task?.priority || "medium";
+    const plan = getPlanById(planId);
+    elements.researchTaskDetailContext.textContent = plan?.title
+      ? "研究プラン「" + plan.title + "」の進捗"
+      : "研究プランに紐付いていない研究タスク";
+    elements.deleteResearchTaskDetail.hidden = !task;
+    elements.completeResearchTaskDetail.hidden = !task || task.status === "completed";
+    updateResearchPlanSelectors();
+    elements.researchTaskDetailPlan.value = planId;
+    elements.researchTaskDetailModal.hidden = false;
+    document.body.classList.add("modal-open");
+    window.setTimeout(() => elements.researchTaskDetailName.focus(), 40);
+  }
+
+  function closeResearchTaskDetail() {
+    elements.researchTaskDetailModal.hidden = true;
+    state.editingResearchTaskId = null;
+    elements.researchTaskDetailForm.reset();
+    if (elements.researchPlanModal.hidden && elements.researchScheduleModal.hidden && elements.taskModal.hidden) {
+      document.body.classList.remove("modal-open");
+    }
+  }
+
+  function getResearchTaskDetailFromForm() {
+    const existing = state.tasks.find((task) => task.id === state.editingResearchTaskId);
+    const status = elements.researchTaskDetailStatus.value;
+    const completedAt = status === "completed"
+      ? existing?.completedAt || new Date().toISOString()
+      : null;
+    const researchTag = getActivityTagLabel("research");
+    return normalizeTask({
+      id: state.editingResearchTaskId || createId(),
+      title: elements.researchTaskDetailName.value.trim(),
+      memo: elements.researchTaskDetailMemo.value.trim(),
+      researchReport: elements.researchTaskDetailReport.value.trim(),
+      tags: normalizeTags([...(existing?.tags || []), researchTag]),
+      isResearch: true,
+      researchPlanId: elements.researchTaskDetailPlan.value || "",
+      status,
+      dueDate: elements.researchTaskDetailDueDate.value || "",
+      priority: elements.researchTaskDetailPriority.value,
+      completedAt,
+      reminderAt: existing?.reminderAt || "",
+      reminderEnabled: Boolean(existing?.reminderEnabled),
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function saveResearchTaskDetail(event) {
+    event.preventDefault();
+    if (!elements.researchTaskDetailForm.reportValidity()) return;
+    const task = getResearchTaskDetailFromForm();
+    const isEditing = Boolean(state.editingResearchTaskId);
+    const saveButton = elements.researchTaskDetailForm.querySelector("button[type=submit]");
+    saveButton.disabled = true;
+    try {
+      if (state.mode === "local") {
+        const index = state.tasks.findIndex((item) => item.id === task.id);
+        if (index >= 0) state.tasks[index] = task;
+        else state.tasks.unshift(task);
+        writeLocalTasks();
+        setSyncStatus("この端末のみ", "local");
+      } else {
+        const data = await runRemoteTaskMutation(task, isEditing ? "update" : "insert");
+        if (isEditing) {
+          state.tasks = state.tasks.map((item) => item.id === task.id ? normalizeTask(data) : item);
+        } else {
+          state.tasks.unshift(normalizeTask(data));
+        }
+        setSyncStatus("同期済み", "synced");
+      }
+      closeResearchTaskDetail();
+      render();
+      showToast(task.status === "completed" ? "進捗タスクを完了しました" : (isEditing ? "進捗タスクを更新しました" : "進捗タスクを追加しました"));
+    } catch (error) {
+      setSyncStatus("同期エラー", "error");
+      showToast(toFriendlyError(error), true);
+    } finally {
+      saveButton.disabled = false;
+    }
+  }
+
+  function completeResearchTaskFromDetail() {
+    if (!state.editingResearchTaskId) return;
+    elements.researchTaskDetailStatus.value = "completed";
+    elements.researchTaskDetailForm.requestSubmit();
   }
 
   function getResearchScheduleFromForm() {
@@ -1909,6 +2098,7 @@
     state.schedules = readLocalCollection(RESEARCH_SCHEDULES_STORAGE_KEY, normalizeSchedule);
     state.researchRemoteAvailable = true;
     state.researchTaskSchemaAvailable = true;
+    state.researchPlanSchemaAvailable = true;
     state.researchDataError = "";
     localStorage.setItem(LOCAL_MODE_KEY, "true");
     elements.accountButton.hidden = true;
@@ -1937,7 +2127,10 @@
     const task = state.tasks.find((item) => item.id === taskId);
     if (!task) return;
     if (target.dataset.action === "toggle") toggleTask(taskId);
-    if (target.dataset.action === "edit") openTaskModal(task);
+    if (target.dataset.action === "edit") {
+      if (card.closest(".research-task-list")) openResearchTaskDetail(task);
+      else openTaskModal(task);
+    }
     if (target.dataset.action === "delete") deleteTask(taskId);
   }
 
@@ -1955,13 +2148,23 @@
     const emptyAction = event.target.closest("[data-empty-action]")?.dataset.emptyAction;
     if (emptyAction === "plan") return openResearchPlanModal();
     if (emptyAction === "schedule") return openResearchScheduleModal();
-    if (emptyAction === "task") return openTaskModal(null, { activityId: "research" });
+    if (emptyAction === "task") return openResearchTaskDetail(null, { researchPlanId: "" });
 
     const target = event.target.closest("[data-research-action]");
     if (!target) return;
     const action = target.dataset.researchAction;
     const planCard = target.closest("[data-plan-id]");
     const scheduleCard = target.closest("[data-schedule-id]");
+    const taskId = target.dataset.taskId;
+    if (action === "open-task" && taskId) {
+      const task = state.tasks.find((item) => item.id === taskId);
+      if (task) openResearchTaskDetail(task);
+      return;
+    }
+    if (action === "add-plan-task" && planCard) {
+      openResearchTaskDetail(null, { researchPlanId: planCard.dataset.planId });
+      return;
+    }
     if (action === "edit-plan" && planCard) openResearchPlanModal(state.plans.find((plan) => plan.id === planCard.dataset.planId));
     if (action === "delete-plan" && planCard) deleteResearchPlan(planCard.dataset.planId);
     if (action === "edit-schedule" && scheduleCard) openResearchScheduleModal(state.schedules.find((schedule) => schedule.id === scheduleCard.dataset.scheduleId));
@@ -2019,6 +2222,14 @@
       if (event.target === elements.researchPlanModal) closeResearchPlanModal();
     });
     elements.researchScheduleForm.addEventListener("submit", saveResearchSchedule);
+    elements.researchTaskDetailForm.addEventListener("submit", saveResearchTaskDetail);
+    elements.closeResearchTaskDetail.addEventListener("click", closeResearchTaskDetail);
+    elements.cancelResearchTaskDetail.addEventListener("click", closeResearchTaskDetail);
+    elements.deleteResearchTaskDetail.addEventListener("click", () => deleteTask(state.editingResearchTaskId));
+    elements.completeResearchTaskDetail.addEventListener("click", completeResearchTaskFromDetail);
+    elements.researchTaskDetailModal.addEventListener("click", (event) => {
+      if (event.target === elements.researchTaskDetailModal) closeResearchTaskDetail();
+    });
     elements.closeResearchScheduleModal.addEventListener("click", closeResearchScheduleModal);
     elements.cancelResearchScheduleButton.addEventListener("click", closeResearchScheduleModal);
     elements.deleteResearchScheduleButton.addEventListener("click", () => deleteResearchSchedule(state.editingScheduleId));
@@ -2064,6 +2275,7 @@
       else if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
       else if (event.key === "Escape" && !elements.researchPlanModal.hidden) closeResearchPlanModal();
       else if (event.key === "Escape" && !elements.researchScheduleModal.hidden) closeResearchScheduleModal();
+      else if (event.key === "Escape" && !elements.researchTaskDetailModal.hidden) closeResearchTaskDetail();
       else if (event.key === "Escape" && document.body.classList.contains("sidebar-open")) closeSidebar();
       if (typing || elements.authShell.hidden === false) return;
       if (!["home", "todo"].includes(state.sidebarView)) return;
