@@ -183,6 +183,9 @@
     researchPlanId: $("researchPlanId"),
     researchPlanName: $("researchPlanName"),
     researchPlanObjective: $("researchPlanObjective"),
+    researchPlanOriginFacts: $("researchPlanOriginFacts"),
+    researchPlanHypothesis: $("researchPlanHypothesis"),
+    researchPlanHypothesisBasis: $("researchPlanHypothesisBasis"),
     researchPlanStatus: $("researchPlanStatus"),
     researchPlanTargetDate: $("researchPlanTargetDate"),
     researchPlanNextAction: $("researchPlanNextAction"),
@@ -1234,52 +1237,52 @@
     const hypothesis = plan.hypothesis || "仮説はまだ記録されていません。";
     const hypothesisBasis = plan.hypothesisBasis || "仮説の根拠はまだ記録されていません。";
     const taskList = openTasks.length
-      ? openTasks.map((task) => ${{
-          <button class="research-plan-task" type="button" data-research-action="open-task" data-task-id="${{escapeHtml(task.id)}">
+      ? openTasks.map((task) => ${
+          <button class="research-plan-task" type="button" data-research-action="open-task" data-task-id="${escapeHtml(task.id)}">
             <span class="research-plan-task-status" aria-hidden="true"></span>
-            <span class="research-plan-task-title">${{escapeHtml(task.title)}</span>
+            <span class="research-plan-task-title">${escapeHtml(task.title)}</span>
             <span class="research-plan-task-arrow" aria-hidden="true">→</span>
           </button>
         }).join("")
       : '<p class="research-plan-task-empty">未完了の進捗タスクはありません。</p>';
 
-    return ${{
-      <article class="research-plan-item" data-plan-id="${{escapeHtml(plan.id)}">
+    return ${
+      <article class="research-plan-item" data-plan-id="${escapeHtml(plan.id)}">
         <div class="research-item-body">
           <div class="research-item-title-row">
-            <h3>${{escapeHtml(plan.title)}</h3>
-            <span class="status-chip research-status-${{escapeHtml(plan.status)}">${{escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
+            <h3>${escapeHtml(plan.title)}</h3>
+            <span class="status-chip research-status-${escapeHtml(plan.status)}">${escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
           </div>
           <div class="research-plan-sections">
             <section class="research-plan-section">
               <span class="research-plan-section-label">発端｜解決したい疑問点</span>
-              <p>${{escapeHtml(originQuestion)}</p>
+              <p>${escapeHtml(originQuestion)}</p>
             </section>
             <section class="research-plan-section">
               <span class="research-plan-section-label">発端｜確認されている事実・根拠</span>
-              <p>${{escapeHtml(originFacts)}</p>
+              <p>${escapeHtml(originFacts)}</p>
             </section>
             <section class="research-plan-section">
               <span class="research-plan-section-label">仮説</span>
-              <p>${{escapeHtml(hypothesis)}</p>
+              <p>${escapeHtml(hypothesis)}</p>
             </section>
             <section class="research-plan-section">
               <span class="research-plan-section-label">仮説の根拠</span>
-              <p>${{escapeHtml(hypothesisBasis)}</p>
+              <p>${escapeHtml(hypothesisBasis)}</p>
             </section>
           </div>
           <div class="research-plan-progress">
             <div class="research-plan-progress-heading">
               <div>
                 <span class="research-plan-section-label">進捗タスク</span>
-                <strong>${{openTasks.length}件が進行中</strong>
+                <strong>${openTasks.length}件が進行中</strong>
               </div>
               <button class="small-action-button" type="button" data-research-action="add-plan-task">＋ タスク追加</button>
             </div>
-            <div class="research-plan-task-list">${{taskList}</div>
+            <div class="research-plan-task-list">${taskList}</div>
             <div class="research-item-meta">
-              <span>${{escapeHtml(formatTargetDate(plan.targetDate))}</span>
-              <span>完了済み ${{completedTaskCount}件</span>
+              <span>${escapeHtml(formatTargetDate(plan.targetDate))}</span>
+              <span>完了済み ${completedTaskCount}件</span>
             </div>
           </div>
         </div>
@@ -1728,6 +1731,9 @@
       id: state.editingPlanId || createId(),
       title: elements.researchPlanName.value.trim(),
       objective: elements.researchPlanObjective.value.trim(),
+      originFacts: elements.researchPlanOriginFacts.value.trim(),
+      hypothesis: elements.researchPlanHypothesis.value.trim(),
+      hypothesisBasis: elements.researchPlanHypothesisBasis.value.trim(),
       status: elements.researchPlanStatus.value,
       targetDate: elements.researchPlanTargetDate.value || "",
       nextAction: elements.researchPlanNextAction.value.trim(),
@@ -1795,6 +1801,9 @@
     elements.researchPlanId.value = plan?.id || "";
     elements.researchPlanName.value = plan?.title || "";
     elements.researchPlanObjective.value = plan?.objective || "";
+    elements.researchPlanOriginFacts.value = plan?.originFacts || "";
+    elements.researchPlanHypothesis.value = plan?.hypothesis || "";
+    elements.researchPlanHypothesisBasis.value = plan?.hypothesisBasis || "";
     elements.researchPlanStatus.value = plan?.status || "active";
     elements.researchPlanTargetDate.value = plan?.targetDate || "";
     elements.researchPlanNextAction.value = plan?.nextAction || "";
