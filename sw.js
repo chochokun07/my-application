@@ -1,4 +1,4 @@
-const CACHE_NAME = "my-application-v0.3.3";
+const CACHE_NAME = "my-application-v0.3.4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -36,7 +36,10 @@ self.addEventListener("fetch", (event) => {
   if (
     requestUrl.pathname.endsWith("/sw.js") ||
     event.request.mode === "navigate" ||
-    requestUrl.pathname.endsWith("/index.html")
+    requestUrl.pathname.endsWith("/index.html") ||
+    requestUrl.pathname.endsWith("/styles.css") ||
+    requestUrl.pathname.endsWith("/app.js") ||
+    requestUrl.pathname.endsWith("/hobby.js")
   ) {
     event.respondWith(
       fetch(event.request).then((response) => {
