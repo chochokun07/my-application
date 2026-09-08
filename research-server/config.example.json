@@ -1,0 +1,13 @@
+{
+  "research_root": "C:/Users/YOUR_NAME/Documents/VGP研究活動",
+  "state_file": "knowledge/research_state.md",
+  "goal_file": "planning/research_goal.md",
+  "record_directories": ["knowledge", "planning"],
+  "adoption_directory": "knowledge/vectory-adopted",
+  "allowed_origins": [
+    "https://chochokun07.github.io",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000"
+  ],
+  "packet_command": "codex exec --model gpt-5.6-luna --sandbox read-only --skip-git-repo-check -"
+}

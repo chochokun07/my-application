@@ -15,6 +15,9 @@
 - スマートフォンへのPWAインストール
 - 通知日時を保存できるデータ構造
 - 研究ページでの予定・研究プラン・研究タスクの管理
+- 自宅PCの研究サーバー状態、研究状態、最近の記録、ファイル一覧の確認
+- ローカル資料からのResearch Packet生成とSolへの受け渡し
+- 人間が採用したSol回答だけをローカル研究記録へ反映
 - ページ名と同じタグを付けたタスクを、各活動ページとメインTo Doで共通管理
 
 
@@ -41,6 +44,8 @@ PC・スマートフォン間で同期する場合は、次の手順を行って
 
 研究ページを同期利用する場合は、既存の `tasks` テーブルに研究連携用の列を追加し、`research_plans` と `research_schedules` テーブルを作成する必要があります。今回追加したSQLを実行すると、既存タスクを維持したまま反映できます。
 
+研究サーバー連携を利用する場合は、先に [research-server/README.md](research-server/README.md) の手順で自宅PC側を設定してください。Supabaseには研究状態の短い要約・最終同期日時・Research Packetのメタ情報だけを保存し、研究ファイル本文、接続URL、アクセストークンは保存しません。
+
 タスクは、タグと活動ページ名が一致すると、その活動ページのタスク欄に表示されます。タグ候補はアプリ設定から追加・削除でき、活動ページ名は自動的に候補へ反映されます。
 
 GitHub FreeでGitHub Pagesを使う場合、リポジトリは公開設定が必要です。タスク本文はGitHubではなく、Supabaseに保存されます。
@@ -61,8 +66,10 @@ python3 -m http.server 8080
 index.html              画面構造
 styles.css              レスポンシブUI
 app.js                  To Do・研究管理と認証・同期の処理
+research-bridge.js      研究サーバー・Research Packet・Sol連携
 config.js               Supabase接続設定
 manifest.webmanifest    PWA設定
 sw.js                   オフライン用キャッシュ
 supabase/schema.sql     DBとRLSの定義
+research-server/        自宅PCで起動する認証付きローカルAPI
 ```

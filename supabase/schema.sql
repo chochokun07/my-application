@@ -382,3 +382,83 @@ create trigger project_concepts_set_updated_at before update on public.project_c
 
 drop trigger if exists identity_concept_items_set_updated_at on public.identity_concept_items;
 create trigger identity_concept_items_set_updated_at before update on public.identity_concept_items for each row execute function public.set_hobby_updated_at();
+
+-- 研究サーバー連携: 軽量な要約・同期時刻・Research Packetメタ情報のみ
+-- サーバーURL、アクセストークン、研究ファイル本文、Packet本文、Sol回答全文は保存しない。
+create table if not exists public.research_page_settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  state_summary text,
+  last_sync_at timestamptz,
+  last_record_title text,
+  server_label text,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.research_packets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  problem text not null,
+  source_files text[] not null default '{}',
+  generated_by text not null default 'local-server',
+  status text not null default 'draft'
+    check (status in ('draft', 'sent_to_sol', 'reviewed', 'adopted', 'rejected')),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.research_consultations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  packet_id uuid not null references public.research_packets(id) on delete cascade,
+  status text not null default 'draft'
+    check (status in ('draft', 'adopted', 'rejected')),
+  response_excerpt text,
+  adopted_record_path text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (user_id, packet_id)
+);
+
+create index if not exists research_packets_user_created_idx
+  on public.research_packets (user_id, created_at desc);
+
+create index if not exists research_consultations_user_updated_idx
+  on public.research_consultations (user_id, updated_at desc);
+
+alter table public.research_page_settings enable row level security;
+alter table public.research_packets enable row level security;
+alter table public.research_consultations enable row level security;
+
+drop policy if exists "research_page_settings_select_own" on public.research_page_settings;
+create policy "research_page_settings_select_own" on public.research_page_settings for select using (auth.uid() = user_id);
+drop policy if exists "research_page_settings_insert_own" on public.research_page_settings;
+create policy "research_page_settings_insert_own" on public.research_page_settings for insert with check (auth.uid() = user_id);
+drop policy if exists "research_page_settings_update_own" on public.research_page_settings;
+create policy "research_page_settings_update_own" on public.research_page_settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "research_page_settings_delete_own" on public.research_page_settings;
+create policy "research_page_settings_delete_own" on public.research_page_settings for delete using (auth.uid() = user_id);
+
+drop policy if exists "research_packets_select_own" on public.research_packets;
+create policy "research_packets_select_own" on public.research_packets for select using (auth.uid() = user_id);
+drop policy if exists "research_packets_insert_own" on public.research_packets;
+create policy "research_packets_insert_own" on public.research_packets for insert with check (auth.uid() = user_id);
+drop policy if exists "research_packets_update_own" on public.research_packets;
+create policy "research_packets_update_own" on public.research_packets for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "research_packets_delete_own" on public.research_packets;
+create policy "research_packets_delete_own" on public.research_packets for delete using (auth.uid() = user_id);
+
+drop policy if exists "research_consultations_select_own" on public.research_consultations;
+create policy "research_consultations_select_own" on public.research_consultations for select using (auth.uid() = user_id);
+drop policy if exists "research_consultations_insert_own" on public.research_consultations;
+create policy "research_consultations_insert_own" on public.research_consultations for insert with check (auth.uid() = user_id);
+drop policy if exists "research_consultations_update_own" on public.research_consultations;
+create policy "research_consultations_update_own" on public.research_consultations for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "research_consultations_delete_own" on public.research_consultations;
+create policy "research_consultations_delete_own" on public.research_consultations for delete using (auth.uid() = user_id);
+
+drop trigger if exists research_page_settings_set_updated_at on public.research_page_settings;
+create trigger research_page_settings_set_updated_at before update on public.research_page_settings for each row execute function public.set_hobby_updated_at();
+drop trigger if exists research_packets_set_updated_at on public.research_packets;
+create trigger research_packets_set_updated_at before update on public.research_packets for each row execute function public.set_hobby_updated_at();
+drop trigger if exists research_consultations_set_updated_at on public.research_consultations;
+create trigger research_consultations_set_updated_at before update on public.research_consultations for each row execute function public.set_hobby_updated_at();

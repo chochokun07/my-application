@@ -74,6 +74,12 @@
     toastTimer: null,
   };
 
+  window.__VECTORY_APP_CONTEXT__ = {
+    getSupabaseClient: () => supabaseClient,
+    getUser: () => state.user,
+    getMode: () => state.mode,
+  };
+
   const $ = (id) => document.getElementById(id);
   const elements = {
     appShell: $("appShell"),
@@ -1598,6 +1604,7 @@
 
   async function handleSession(session) {
     state.user = session?.user || null;
+    window.dispatchEvent(new CustomEvent("vectory:session-change", { detail: { signedIn: Boolean(state.user) } }));
     if (!state.user) {
       state.tasks = [];
       state.plans = [];
@@ -2216,6 +2223,7 @@
     elements.openAuthButton.hidden = !supabaseClient;
     elements.setupNotice.hidden = false;
     setSyncStatus("この端末のみ", "local");
+    window.dispatchEvent(new CustomEvent("vectory:session-change", { detail: { signedIn: false } }));
     showApp();
   }
 

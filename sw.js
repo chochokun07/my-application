@@ -1,10 +1,11 @@
-const CACHE_NAME = "my-application-v0.3.6";
+const CACHE_NAME = "my-application-v0.4.0";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./hobby.js",
+  "./research-bridge.js",
   "./manifest.webmanifest",
   "./assets/icon.png",
   "./assets/icon-192.png",
@@ -39,7 +40,8 @@ self.addEventListener("fetch", (event) => {
     requestUrl.pathname.endsWith("/index.html") ||
     requestUrl.pathname.endsWith("/styles.css") ||
     requestUrl.pathname.endsWith("/app.js") ||
-    requestUrl.pathname.endsWith("/hobby.js")
+    requestUrl.pathname.endsWith("/hobby.js") ||
+    requestUrl.pathname.endsWith("/research-bridge.js")
   ) {
     event.respondWith(
       fetch(event.request).then((response) => {
