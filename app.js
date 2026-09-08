@@ -1249,22 +1249,22 @@
       ? topTasks.map((task) => `
           <div class="research-plan-priority-task">
             <span class="research-plan-task-status" aria-hidden="true"></span>
-            <span class="research-plan-priority-label">${{escapeHtml(PRIORITY_LABELS[task.priority])}</span>
-            <span class="research-plan-task-title">${{escapeHtml(task.title)}</span>
+            <span class="research-plan-priority-label">${escapeHtml(PRIORITY_LABELS[task.priority])}</span>
+            <span class="research-plan-task-title">${escapeHtml(task.title)}</span>
           </div>
         `).join("")
       : '<span class="research-plan-task-empty">進捗タスクはありません。</span>';
 
     return `
-      <article class="research-plan-item research-plan-summary" data-plan-id="${{escapeHtml(plan.id)}" data-research-action="open-plan" tabindex="0" role="button">
+      <article class="research-plan-item research-plan-summary" data-plan-id="${escapeHtml(plan.id)}" data-research-action="open-plan" tabindex="0" role="button">
         <div class="research-item-body">
           <div class="research-item-title-row">
-            <h3>${{escapeHtml(plan.title)}</h3>
-            <span class="status-chip research-status-${{escapeHtml(plan.status)}">${{escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
+            <h3>${escapeHtml(plan.title)}</h3>
+            <span class="status-chip research-status-${escapeHtml(plan.status)}">${escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
           </div>
           <div class="research-plan-summary-progress">
             <span class="research-plan-section-label">優先度上位の進捗</span>
-            <div class="research-plan-priority-list">${{progress}</div>
+            <div class="research-plan-priority-list">${progress}</div>
           </div>
         </div>
         <div class="research-item-actions">
@@ -1291,10 +1291,10 @@
       const schedule = item.schedule;
       const plan = getPlanById(schedule.planId);
       return `
-        <article class="research-timeline-card" data-schedule-id="${{escapeHtml(schedule.id)}" style="--timeline-position: ${{Math.max(3, Math.min(97, ratio * 100))}%">
-          <time datetime="${{escapeHtml(schedule.scheduledAt)}">${{escapeHtml(formatScheduleDateTime(schedule.scheduledAt))}</time>
-          <strong>${{escapeHtml(schedule.title)}</strong>
-          <span>${{escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind])}${{plan ? " · " + escapeHtml(plan.title) : ""}</span>
+        <article class="research-timeline-card" data-schedule-id="${escapeHtml(schedule.id)}" style="--timeline-position: ${Math.max(3, Math.min(97, ratio * 100))}%">
+          <time datetime="${escapeHtml(schedule.scheduledAt)}">${escapeHtml(formatScheduleDateTime(schedule.scheduledAt))}</time>
+          <strong>${escapeHtml(schedule.title)}</strong>
+          <span>${escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind])}${plan ? " · " + escapeHtml(plan.title) : ""}</span>
           <div class="research-item-actions">
             <button class="task-action" type="button" data-research-action="edit-schedule">編集</button>
             <button class="task-action delete" type="button" data-research-action="delete-schedule">削除</button>
@@ -1305,7 +1305,7 @@
 
     const ticks = items.map((item) => {
       const ratio = Number.isNaN(item.date.getTime()) ? 50 : Math.max(3, Math.min(97, ((item.date.getTime() - minTime) / span) * 100));
-      return `<span class="research-timeline-tick" style="left: ${{ratio}%">${{escapeHtml(formatScheduleDateTime(item.schedule.scheduledAt))}</span>`;
+      return `<span class="research-timeline-tick" style="left: ${ratio}%">${escapeHtml(formatScheduleDateTime(item.schedule.scheduledAt))}</span>`;
     }).join("");
 
     return `
@@ -1313,8 +1313,8 @@
         <div class="research-timeline-scroll">
           <div class="research-timeline-axis">
             <span class="research-timeline-line" aria-hidden="true"></span>
-            ${{ticks}
-            ${{timelineItems}
+            ${ticks}
+            ${timelineItems}
           </div>
         </div>
       </div>
@@ -1882,21 +1882,21 @@
     const planTasks = state.tasks.filter((task) => task.researchPlanId === plan.id);
     const body = `
       <div class="research-plan-detail-grid">
-        <section><span>発端｜解決したい疑問点</span><p>${{escapeHtml(plan.objective || "未記録")}</p></section>
-        <section><span>発端｜確認されている事実・根拠</span><p>${{escapeHtml(plan.originFacts || "未記録")}</p></section>
-        <section><span>仮説</span><p>${{escapeHtml(plan.hypothesis || "未記録")}</p></section>
-        <section><span>仮説の根拠</span><p>${{escapeHtml(plan.hypothesisBasis || "未記録")}</p></section>
+        <section><span>発端｜解決したい疑問点</span><p>${escapeHtml(plan.objective || "未記録")}</p></section>
+        <section><span>発端｜確認されている事実・根拠</span><p>${escapeHtml(plan.originFacts || "未記録")}</p></section>
+        <section><span>仮説</span><p>${escapeHtml(plan.hypothesis || "未記録")}</p></section>
+        <section><span>仮説の根拠</span><p>${escapeHtml(plan.hypothesisBasis || "未記録")}</p></section>
       </div>
-      <p class="research-plan-detail-meta">${{escapeHtml(formatTargetDate(plan.targetDate))} · ${{escapeHtml(PLAN_STATUS_LABELS[plan.status])}</p>
+      <p class="research-plan-detail-meta">${escapeHtml(formatTargetDate(plan.targetDate))} · ${escapeHtml(PLAN_STATUS_LABELS[plan.status])}</p>
     `;
     elements.researchPlanDetailBody.innerHTML = body;
     const sortedTasks = sortActivityTasks(planTasks);
     elements.researchPlanDetailTaskList.innerHTML = sortedTasks.length
       ? sortedTasks.map((task) => `
-          <button class="research-plan-detail-task" type="button" data-research-detail-action="open-task" data-task-id="${{escapeHtml(task.id)}">
-            <span class="research-plan-task-status ${{task.status === "completed" ? "is-completed" : ""}" aria-hidden="true"></span>
-            <span class="research-plan-task-title">${{escapeHtml(task.title)}</span>
-            <span class="research-plan-detail-task-status">${{escapeHtml(STATUS_LABELS[task.status])}</span>
+          <button class="research-plan-detail-task" type="button" data-research-detail-action="open-task" data-task-id="${escapeHtml(task.id)}">
+            <span class="research-plan-task-status ${task.status === "completed" ? "is-completed" : ""}" aria-hidden="true"></span>
+            <span class="research-plan-task-title">${escapeHtml(task.title)}</span>
+            <span class="research-plan-detail-task-status">${escapeHtml(STATUS_LABELS[task.status])}</span>
           </button>
         `).join("")
       : '<p class="research-plan-task-empty">タスクはまだありません。</p>';
