@@ -6,6 +6,7 @@
   const REMOTE_SETTINGS_KEY = "my_application_settings";
   const RESEARCH_PLANS_STORAGE_KEY = "my-application.research-plans.v0.1";
   const RESEARCH_SCHEDULES_STORAGE_KEY = "my-application.research-schedules.v0.1";
+  const RESEARCH_SCHEDULE_HORIZON_STORAGE_KEY = "my-application.research-schedule-horizon.v0.1";
   const LOCAL_MODE_KEY = "my-application.local-mode";
   const TABLE_NAME = "tasks";
   const RESEARCH_PLANS_TABLE = "research_plans";
@@ -177,6 +178,7 @@
     addResearchPlanInlineButton: $("addResearchPlanInlineButton"),
     addResearchScheduleButton: $("addResearchScheduleButton"),
     addResearchScheduleInlineButton: $("addResearchScheduleInlineButton"),
+    researchScheduleHorizon: $("researchScheduleHorizon"),
     addResearchTaskButton: $("addResearchTaskButton"),
     researchPlanModal: $("researchPlanModal"),
     researchPlanModalTitle: $("researchPlanModalTitle"),
@@ -1276,51 +1278,73 @@
     `;
   }
 
-  function renderResearchTimeline(schedules) {
+  function getResearchScheduleHorizonDays() {
+    return localStorage.getItem(RESEARCH_SCHEDULE_HORIZON_STORAGE_KEY) === "30" ? 30 : 7;
+  }
+
+  function renderResearchTimeline(schedules, horizonDays = getResearchScheduleHorizonDays()) {
     if (!schedules.length) return "";
+    const now = Date.now();
+    const horizon = now + horizonDays * 86400000;
     const items = schedules.map((schedule) => ({
       schedule,
       date: new Date(schedule.scheduledAt),
     }));
-    const datedItems = items.filter((item) => !Number.isNaN(item.date.getTime()));
-    const minTime = datedItems.length ? Math.min(...datedItems.map((item) => item.date.getTime())) : Date.now();
-    const maxTime = datedItems.length ? Math.max(...datedItems.map((item) => item.date.getTime())) : minTime + 86400000;
-    const span = Math.max(maxTime - minTime, 86400000);
-    const timelineItems = items.map((item) => {
-      const ratio = Number.isNaN(item.date.getTime()) ? 0.5 : (item.date.getTime() - minTime) / span;
+    const datedItems = items.filter((item) => Number.isFinite(item.date.getTime()));
+    const visibleItems = datedItems.filter((item) => {
+      const timestamp = item.date.getTime();
+      return timestamp >= now && timestamp <= horizon;
+    });
+    const pastItems = datedItems.filter((item) => item.date.getTime() < now);
+    const futureItems = datedItems.filter((item) => item.date.getTime() > horizon);
+    const invalidItems = items.filter((item) => !Number.isFinite(item.date.getTime()));
+    const span = horizon - now;
+    const timelineItems = visibleItems.map((item) => {
+      const ratio = ((item.date.getTime() - now) / span) * 100;
       const schedule = item.schedule;
       const plan = getPlanById(schedule.planId);
-      return `
-        <article class="research-timeline-card" data-schedule-id="${escapeHtml(schedule.id)}" style="--timeline-position: ${Math.max(3, Math.min(97, ratio * 100))}%">
-          <time datetime="${escapeHtml(schedule.scheduledAt)}">${escapeHtml(formatScheduleDateTime(schedule.scheduledAt))}</time>
-          <strong>${escapeHtml(schedule.title)}</strong>
-          <span>${escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind])}${plan ? " · " + escapeHtml(plan.title) : ""}</span>
-          <div class="research-item-actions">
-            <button class="task-action" type="button" data-research-action="edit-schedule">編集</button>
-            <button class="task-action delete" type="button" data-research-action="delete-schedule">削除</button>
-          </div>
-        </article>
-      `;
+      return
+        "<article class="research-timeline-card" data-schedule-id="" + escapeHtml(schedule.id) + "" style="--timeline-position: " + Math.max(4, Math.min(96, ratio)) + "%">" +
+          "<time datetime="" + escapeHtml(schedule.scheduledAt) + "">" + escapeHtml(formatScheduleDateTime(schedule.scheduledAt)) + "</time>" +
+          "<strong>" + escapeHtml(schedule.title) + "</strong>" +
+          "<span>" + escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind]) + (plan ? " · " + escapeHtml(plan.title) : "") + "</span>" +
+          "<div class="research-item-actions">" +
+            "<button class="task-action" type="button" data-research-action="edit-schedule">編集</button>" +
+            "<button class="task-action delete" type="button" data-research-action="delete-schedule">削除</button>" +
+          "</div>" +
+        "</article>";
     }).join("");
 
-    const ticks = items.map((item) => {
-      const ratio = Number.isNaN(item.date.getTime()) ? 50 : Math.max(3, Math.min(97, ((item.date.getTime() - minTime) / span) * 100));
-      return `<span class="research-timeline-tick" style="left: ${ratio}%">${escapeHtml(formatScheduleDateTime(item.schedule.scheduledAt))}</span>`;
-    }).join("");
+    const tick = (label, timestamp, position) =>
+      "<span class="research-timeline-tick" style="left: " + position + "%">" +
+        "<strong>" + escapeHtml(label) + "</strong>" +
+        "<small>" + escapeHtml(dateTimeFormatter.format(new Date(timestamp))) + "</small>" +
+      "</span>";
+    const overflow = (label, list, position, modifier = "") => {
+      if (!list.length) return "";
+      const titles = list.map((item) => item.schedule.title).join("、");
+      return
+        "<div class="research-timeline-overflow " + modifier + "" style="left: " + position + "%" title="" + escapeHtml(titles) + "">" +
+          "<strong>" + escapeHtml(label + list.length + "件") + "</strong>" +
+          "<span>範囲外の予定</span>" +
+        "</div>";
+    };
 
-    return `
-      <div class="research-timeline">
-        <div class="research-timeline-scroll">
-          <div class="research-timeline-axis">
-            <span class="research-timeline-line" aria-hidden="true"></span>
-            ${ticks}
-            ${timelineItems}
-          </div>
-        </div>
-      </div>
-    `;
+    return
+      "<div class="research-timeline">" +
+        "<div class="research-timeline-scroll">" +
+          "<div class="research-timeline-axis">" +
+            "<span class="research-timeline-line" aria-hidden="true"></span>" +
+            tick("現在", now, 2) +
+            tick("+" + horizonDays + "日", horizon, 98) +
+            overflow("過去", pastItems, 2, "is-past") +
+            overflow("他", futureItems, 98, "is-future") +
+            overflow("日付不明", invalidItems, 50, "is-invalid") +
+            timelineItems +
+          "</div>" +
+        "</div>" +
+      "</div>";
   }
-
   function renderResearchSchedule(schedule) {
     const plan = getPlanById(schedule.planId);
     const notes = schedule.notes ? `<p class="research-item-description">${escapeHtml(schedule.notes)}</p>` : "";
@@ -1425,7 +1449,9 @@
     elements.researchDataNotice.hidden = noticeMessages.length === 0;
     elements.researchDataNoticeText.textContent = noticeMessages.join(" ");
 
-    elements.researchScheduleList.innerHTML = renderResearchTimeline(sortedSchedules);
+    const scheduleHorizonDays = getResearchScheduleHorizonDays();
+    elements.researchScheduleHorizon.value = String(scheduleHorizonDays);
+    elements.researchScheduleList.innerHTML = renderResearchTimeline(sortedSchedules, scheduleHorizonDays);
     elements.researchScheduleList.hidden = sortedSchedules.length === 0;
     elements.researchScheduleEmpty.hidden = sortedSchedules.length !== 0;
 
@@ -1822,6 +1848,7 @@
   }
 
   function openResearchPlanModal(plan = null) {
+    if (!elements.researchPlanDetailModal.hidden) closeResearchPlanDetail();
     state.editingPlanId = plan?.id || null;
     elements.researchPlanModalTitle.textContent = plan ? "研究プランを編集" : "研究プランを追加";
     elements.deleteResearchPlanButton.hidden = !plan;
@@ -2287,6 +2314,11 @@
     elements.addResearchPlanInlineButton.addEventListener("click", () => openResearchPlanModal());
     elements.addResearchScheduleButton.addEventListener("click", () => openResearchScheduleModal());
     elements.addResearchScheduleInlineButton.addEventListener("click", () => openResearchScheduleModal());
+    elements.researchScheduleHorizon.addEventListener("change", (event) => {
+      const value = event.target.value === "30" ? "30" : "7";
+      localStorage.setItem(RESEARCH_SCHEDULE_HORIZON_STORAGE_KEY, value);
+      renderResearch();
+    });
     elements.researchPage.addEventListener("click", handleResearchPageClick);
     elements.authForm.addEventListener("submit", handleAuthSubmit);
     elements.authModeButton.addEventListener("click", () => {
