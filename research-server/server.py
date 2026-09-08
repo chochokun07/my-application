@@ -41,6 +41,8 @@ MAX_CANDIDATE_FILES = 240
 CANDIDATE_EXCERPT_CHARS = 300
 DETAIL_EXCERPT_CHARS = 900
 COARSE_SELECTION_LIMIT = 20
+COARSE_PRIMARY_LIMIT = 14
+COARSE_SECONDARY_LIMIT = COARSE_SELECTION_LIMIT - COARSE_PRIMARY_LIMIT
 
 
 def utc_iso(timestamp: float | None = None) -> str:
@@ -195,7 +197,57 @@ class ResearchRepository:
             "ending": cleaned[-size:].strip(),
         }
 
-    def packet_candidates(self) -> list[dict]:
+    def preferred_roots_from_instruction(self, instruction: str) -> list[str]:
+        """Extract explicit directory priorities without trying to interpret all prose."""
+        if not re.search(r"優先|prioriti[sz]e|prefer(?:red|entially)?", instruction or "", re.IGNORECASE):
+            return []
+
+        normalized = str(instruction or "").replace("\\", "/")
+        matches = re.findall(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)+)(?:/\*\*)?", normalized)
+        roots: list[str] = []
+        for match in matches:
+            root = match.strip("/")
+            try:
+                if self.resolve(root).is_dir() and root not in roots:
+                    roots.append(root)
+            except (FileNotFoundError, ValueError):
+                continue
+        return roots
+
+    @staticmethod
+    def is_under_root(relative: str, roots: list[str]) -> bool:
+        return any(relative == root or relative.startswith(f"{root}/") for root in roots)
+
+    def paper_summary_for(self, relative: str) -> str | None:
+        """Return the paired paper summary when a selected source is a paper PDF."""
+        try:
+            paper = self.resolve(relative)
+        except (FileNotFoundError, ValueError):
+            return None
+        if paper.suffix.lower() != ".pdf":
+            return None
+        summary = paper.with_name("要約.md")
+        if summary.is_file() and self.is_text(summary):
+            return self.relative(summary)
+        return None
+
+    def content_path_for_packet(self, relative: str) -> str:
+        return self.paper_summary_for(relative) or relative
+
+    def read_packet_source(self, relative: str) -> str:
+        return self.read_text(self.content_path_for_packet(relative))
+
+    @staticmethod
+    def fallback_candidate_paths(candidates: list[dict], limit: int) -> list[str]:
+        ranked = sorted(
+            candidates,
+            key=lambda item: (item.get("modified_at", ""), item.get("path", "")),
+            reverse=True,
+        )
+        return [item["path"] for item in ranked[:max(1, limit)]]
+
+    def packet_candidates(self, preferred_roots: list[str] | None = None) -> list[dict]:
+        preferred_roots = preferred_roots or []
         candidates: list[dict] = []
         for path in self.root.rglob("*"):
             relative = Path(self.relative(path))
@@ -208,19 +260,47 @@ class ResearchRepository:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
+
+            # A paper is selected logically as its PDF, while Luna reads its paired summary.
+            paper_paths = sorted(path.parent.glob("*.pdf")) if (
+                relative.name == "要約.md" and relative.as_posix().startswith("database/papers/")
+            ) else []
+            if paper_paths:
+                logical_path = self.relative(paper_paths[0])
+                content_path = relative.as_posix()
+                source_type = "paper"
+                name = paper_paths[0].name
+            else:
+                logical_path = relative.as_posix()
+                content_path = logical_path
+                source_type = "file"
+                name = path.name
+
             sections = self.excerpt_sections(text)
             hint = next((line.strip("# ").strip() for line in sections["beginning"].splitlines() if line.strip()), "")
             candidates.append({
-                "path": relative.as_posix(),
-                "name": path.name,
+                "path": logical_path,
+                "content_path": content_path,
+                "source_type": source_type,
+                "name": name,
                 "size": stat.st_size,
                 "modified_at": utc_iso(stat.st_mtime),
+                "candidate_class": "primary" if self.is_under_root(logical_path, preferred_roots) else "secondary",
                 "hint": hint[:180],
                 "beginning": sections["beginning"],
                 "middle": sections["middle"],
                 "ending": sections["ending"],
             })
-        candidates.sort(key=lambda item: item["path"].lower())
+
+        # A paired 要約.md is the only text candidate for its PDF.
+        by_path = {item["path"]: item for item in candidates}
+        candidates = list(by_path.values())
+        candidates.sort(
+            key=lambda item: (
+                item["candidate_class"] != "primary" if preferred_roots else False,
+                item["path"].lower(),
+            )
+        )
         return candidates[:MAX_CANDIDATE_FILES]
 
     def detailed_packet_candidates(self, paths: list[str], candidates: list[dict]) -> list[dict]:
@@ -231,7 +311,7 @@ class ResearchRepository:
             if not base:
                 continue
             try:
-                text = self.read_text(relative)
+                text = self.read_text(base["content_path"])
             except (FileNotFoundError, ValueError, OSError):
                 continue
             detailed.append({
@@ -268,18 +348,41 @@ class ResearchRepository:
         preferred: list[str],
         *,
         stage: str = "final",
+        limit: int | None = None,
+        force_primary: bool = False,
     ) -> str:
-        candidate_lines = "\n".join(
-            json.dumps(item, ensure_ascii=False, separators=(",", ":"))
-            for item in candidates
-        )
+        primary_candidates = [item for item in candidates if item.get("candidate_class") == "primary"]
+        secondary_candidates = [item for item in candidates if item.get("candidate_class") != "primary"]
         preferred_text = "、".join(preferred[:12]) or "なし"
         is_coarse = stage == "coarse"
-        limit = COARSE_SELECTION_LIMIT if is_coarse else 12
+        limit = limit or (COARSE_SELECTION_LIMIT if is_coarse else 12)
         stage_instruction = (
-            "これは第1段階の粗選定です。本文抜粋を比較し、最終候補になり得る資料を最大20件まで選択してください。"
+            f"これは第1段階の粗選定です。本文抜粋を比較し、最終候補になり得る資料を最大{limit}件まで選択してください。"
             if is_coarse
-            else "これは最終選定です。本文抜粋を比較し、Research Packetに使用する資料を最大12件まで選択してください。"
+            else f"これは最終選定です。本文抜粋を比較し、Research Packetに使用する資料を最大{limit}件まで選択してください。"
+        )
+        if primary_candidates:
+            candidate_section = (
+                "PRIMARY CANDIDATES\n"
+                + "\n".join(json.dumps(item, ensure_ascii=False, separators=(",", ":")) for item in primary_candidates)
+                + "\n\nSECONDARY CANDIDATES\n"
+                + "\n".join(json.dumps(item, ensure_ascii=False, separators=(",", ":")) for item in secondary_candidates)
+            )
+            priority_contract = (
+                "資料選定契約:\n"
+                "PRIMARY候補を最初に評価してください。\n"
+                "PRIMARY候補だけで今回の要求を満たせる場合、SECONDARY候補を選択してはいけません。\n"
+                "SECONDARY候補は、PRIMARY候補のみでは不足する情報を補助する場合に限り使用してください。\n"
+            )
+        else:
+            candidate_section = "候補一覧\n" + "\n".join(
+                json.dumps(item, ensure_ascii=False, separators=(",", ":")) for item in candidates
+            )
+            priority_contract = ""
+        retry_instruction = (
+            "前回の選択はPRIMARY優先条件を満たしていません。PRIMARY候補を優先して再選択してください。\n"
+            if force_primary
+            else ""
         )
         return (
             "あなたは研究資料の選定担当です。\n\n"
@@ -291,25 +394,17 @@ class ResearchRepository:
             "3. 過去の解釈・仮説・議論を確認するために必要か\n"
             "4. 比較対象、反例、別条件の結果など、異なる解釈を検討するために必要か\n"
             "5. 最近の結果だけでは判断できない場合、過去の重要資料を補う必要があるか\n\n"
-            "ファイル名やpathだけでは内容を断定してはいけません。\n"
-            "候補一覧に含まれる本文抜粋を確認した上で判断してください。\n\n"
-            "Research Packetが一方向の情報だけで構成されないよう、必要に応じて以下を含めてください。\n"
-            "- 研究目的または全体方針\n"
-            "- 関連する実験事実\n"
-            "- 現在または過去の解釈\n"
-            "- 比較・対照に使える資料\n"
-            "- 今回の問題に直結する最近の記録\n\n"
+            "ファイル名やpathだけでは内容を断定してはいけません。候補一覧の本文抜粋を確認してください。\n\n"
+            f"{priority_contract}{retry_instruction}\n"
             f"{stage_instruction}\n"
             "候補一覧に存在するpathのみ使用してください。\n"
             f"選択数の上限は{limit}件です。\n"
-            "出力はJSON配列のみとしてください。\n"
-            "説明文やMarkdownは付けないでください。\n"
+            "出力はJSON配列のみとしてください。説明文やMarkdownは付けないでください。\n"
             '出力例: ["knowledge/example.md"]\n\n'
             f"今回考えたい問題:\n{problem}\n\n"
             f"資料の取得指示:\n{instruction}\n\n"
             f"手動選択された候補:\n{preferred_text}\n\n"
-            "候補一覧（path、ファイル名、サイズ、更新日時、冒頭の見出し、本文の冒頭・中央・末尾の抜粋）:\n"
-            f"{candidate_lines}"
+            f"{candidate_section}"
         )
 
     @staticmethod
@@ -342,44 +437,85 @@ class ResearchRepository:
                 selected.append(value)
         return selected[:max(1, int(limit))]
 
+    @staticmethod
+    def selection_respects_priority(selected: list[str], candidates: list[dict]) -> bool:
+        primary_paths = {item["path"] for item in candidates if item.get("candidate_class") == "primary"}
+        return not primary_paths or any(path in primary_paths for path in selected)
+
     def choose_packet_files(
         self,
         requested: list[str],
         problem: str = "",
         selection_instruction: str = "",
     ) -> tuple[list[str], str]:
+        preferred_roots = self.preferred_roots_from_instruction(selection_instruction)
+        priority_requested = bool(preferred_roots)
+
         if selection_instruction and self.config["packet_command"]:
-            candidates = self.packet_candidates()
+            candidates = self.packet_candidates(preferred_roots)
+            primary_candidates = [item for item in candidates if item.get("candidate_class") == "primary"]
+            secondary_candidates = [item for item in candidates if item.get("candidate_class") != "primary"]
             if candidates:
-                coarse_output = self.run_packet_command(
-                    self.selection_prompt(
-                        problem,
-                        selection_instruction,
-                        candidates,
-                        requested,
-                        stage="coarse",
+                if priority_requested and primary_candidates:
+                    # Coarse selection is split so a first Luna decision cannot remove all primary sources.
+                    primary_output = self.run_packet_command(
+                        self.selection_prompt(
+                            problem, selection_instruction, primary_candidates, requested,
+                            stage="coarse", limit=COARSE_PRIMARY_LIMIT,
+                        )
                     )
-                )
-                coarse_selected = self.parse_selected_files(
-                    coarse_output,
-                    candidates,
-                    limit=COARSE_SELECTION_LIMIT,
-                )
+                    primary_selected = self.parse_selected_files(
+                        primary_output, primary_candidates, limit=COARSE_PRIMARY_LIMIT,
+                    ) or self.fallback_candidate_paths(primary_candidates, COARSE_PRIMARY_LIMIT)
+
+                    secondary_output = self.run_packet_command(
+                        self.selection_prompt(
+                            problem, selection_instruction, secondary_candidates, requested,
+                            stage="coarse", limit=COARSE_SECONDARY_LIMIT,
+                        )
+                    ) if secondary_candidates else ""
+                    secondary_selected = self.parse_selected_files(
+                        secondary_output, secondary_candidates, limit=COARSE_SECONDARY_LIMIT,
+                    )
+                    coarse_selected = list(dict.fromkeys(primary_selected + secondary_selected))
+                else:
+                    coarse_output = self.run_packet_command(
+                        self.selection_prompt(
+                            problem, selection_instruction, candidates, requested, stage="coarse",
+                        )
+                    )
+                    coarse_selected = self.parse_selected_files(
+                        coarse_output, candidates, limit=COARSE_SELECTION_LIMIT,
+                    )
+
                 if coarse_selected:
                     detailed_candidates = self.detailed_packet_candidates(coarse_selected, candidates)
                     if detailed_candidates:
                         final_output = self.run_packet_command(
                             self.selection_prompt(
-                                problem,
-                                selection_instruction,
-                                detailed_candidates,
-                                requested,
-                                stage="final",
+                                problem, selection_instruction, detailed_candidates, requested, stage="final",
                             )
                         )
                         selected = self.parse_selected_files(final_output, detailed_candidates)
-                        if selected:
+                        if selected and self.selection_respects_priority(selected, detailed_candidates):
                             return selected, "luna"
+                        if selected and priority_requested:
+                            retry_output = self.run_packet_command(
+                                self.selection_prompt(
+                                    problem, selection_instruction, detailed_candidates, requested,
+                                    stage="final", force_primary=True,
+                                )
+                            )
+                            retried = self.parse_selected_files(retry_output, detailed_candidates)
+                            if retried and self.selection_respects_priority(retried, detailed_candidates):
+                                return retried, "luna-retry"
+
+        # Explicit directory priorities remain enforced even when Luna cannot provide a usable result.
+        if priority_requested:
+            priority_candidates = self.packet_candidates(preferred_roots)
+            primary_candidates = [item for item in priority_candidates if item.get("candidate_class") == "primary"]
+            if primary_candidates:
+                return self.fallback_candidate_paths(primary_candidates, 12), "priority-fallback"
 
         chosen: list[str] = []
         for relative in requested[:12]:
@@ -408,7 +544,7 @@ class ResearchRepository:
         used = 0
         for relative in files:
             try:
-                text = self.read_text(relative)[:5000]
+                text = self.read_packet_source(relative)[:5000]
             except (FileNotFoundError, ValueError, OSError):
                 continue
             remaining = MAX_PACKET_CHARS - used
@@ -416,7 +552,9 @@ class ResearchRepository:
                 break
             text = text[:remaining]
             used += len(text)
-            extracts.append(f"--- {relative} ---\n{text}")
+            content_path = self.content_path_for_packet(relative)
+            label = relative if content_path == relative else f"{relative}（内容確認: {content_path}）"
+            extracts.append(f"--- {label} ---\n{text}")
         return (
             "以下のローカル研究記録を整理し、Research Packetを作成してください。\n"
             "新しい研究方向の判断や提案は行わず、事実と解釈を明確に分けてください。\n"
@@ -434,7 +572,7 @@ class ResearchRepository:
         facts, interpretations, results = [], [], []
         for relative in files:
             try:
-                excerpt = self.read_text(relative)[:3500].strip()
+                excerpt = self.read_packet_source(relative)[:3500].strip()
             except (FileNotFoundError, ValueError, OSError):
                 continue
             block = f"### {relative}\n{excerpt}"
