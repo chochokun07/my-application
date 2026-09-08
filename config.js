@@ -10,5 +10,5 @@ if ("serviceWorker" in navigator && (window.isSecureContext || location.hostname
     window.location.reload();
   }, { once: true });
 
-  navigator.serviceWorker.register("./sw.js?v=0.3.1", { updateViaCache: "none" }).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=0.3.2", { updateViaCache: "none" }).catch(() => {});
 }
