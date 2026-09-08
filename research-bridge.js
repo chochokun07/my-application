@@ -416,7 +416,7 @@
     try {
       const packet = await api("/api/packets", {
         method: "POST",
-        timeout: 190000,
+        timeout: 240000,
         body: JSON.stringify({
           problem,
           selection_instruction: selectionInstruction,
