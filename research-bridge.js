@@ -17,6 +17,7 @@
     refreshing: false,
     packetTimer: null,
     packetStartedAt: 0,
+    packetBusy: false,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -401,6 +402,10 @@
   }
 
   function openPacketModal() {
+    if (state.packetBusy) {
+      openModal(elements.researchPacketModal);
+      return;
+    }
     stopPacketProgress();
     setPacketBusy(false);
     elements.researchPacketSubmit.textContent = "作成";
@@ -434,6 +439,7 @@
   }
 
   function setPacketBusy(isBusy) {
+    state.packetBusy = isBusy;
     elements.researchPacketSubmit.disabled = isBusy;
     elements.researchPacketProblem.disabled = isBusy;
     elements.researchPacketSelectionInstruction.disabled = isBusy;
@@ -441,6 +447,7 @@
 
   async function createPacket(event) {
     event.preventDefault();
+    if (state.packetBusy) return;
     const problem = elements.researchPacketProblem.value.trim();
     const selectionInstruction = elements.researchPacketSelectionInstruction.value.trim();
     if (!problem) return;
