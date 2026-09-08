@@ -15,6 +15,8 @@
     latestRecords: [],
     online: false,
     refreshing: false,
+    packetTimer: null,
+    packetStartedAt: 0,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -399,6 +401,9 @@
   }
 
   function openPacketModal() {
+    stopPacketProgress();
+    setPacketBusy(false);
+    elements.researchPacketSubmit.textContent = "作成";
     elements.researchPacketForm.hidden = false;
     elements.researchPacketResult.hidden = true;
     updateSelectionCount();
@@ -406,13 +411,42 @@
     elements.researchPacketProblem.focus();
   }
 
+  function startPacketProgress() {
+    state.packetStartedAt = Date.now();
+    const update = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - state.packetStartedAt) / 1000));
+      elements.researchPacketElapsed.textContent = String(elapsed) + "秒経過";
+    };
+    window.clearInterval(state.packetTimer);
+    elements.researchPacketProgress.hidden = false;
+    elements.researchPacketProgress.setAttribute("aria-busy", "true");
+    elements.researchPacketProgressText.textContent = "Lunaが資料を選定・整理しています…";
+    update();
+    state.packetTimer = window.setInterval(update, 250);
+  }
+
+  function stopPacketProgress() {
+    window.clearInterval(state.packetTimer);
+    state.packetTimer = null;
+    state.packetStartedAt = 0;
+    elements.researchPacketProgress.hidden = true;
+    elements.researchPacketProgress.removeAttribute("aria-busy");
+  }
+
+  function setPacketBusy(isBusy) {
+    elements.researchPacketSubmit.disabled = isBusy;
+    elements.researchPacketProblem.disabled = isBusy;
+    elements.researchPacketSelectionInstruction.disabled = isBusy;
+  }
+
   async function createPacket(event) {
     event.preventDefault();
     const problem = elements.researchPacketProblem.value.trim();
     const selectionInstruction = elements.researchPacketSelectionInstruction.value.trim();
     if (!problem) return;
-    elements.researchPacketSubmit.disabled = true;
-    elements.researchPacketSubmit.textContent = "資料選定・作成中...";
+    setPacketBusy(true);
+    elements.researchPacketSubmit.textContent = "処理中…";
+    startPacketProgress();
     try {
       const packet = await api("/api/packets", {
         method: "POST",
@@ -445,9 +479,10 @@
       elements.researchPacketResult.hidden = false;
       savePacketMetadata(packet, problem).catch(() => {});
     } catch (error) {
-      elements.researchPacketSources.textContent = error.message;
+      elements.researchPacketSources.textContent = "作成に失敗しました：" + error.message;
     } finally {
-      elements.researchPacketSubmit.disabled = false;
+      stopPacketProgress();
+      setPacketBusy(false);
       elements.researchPacketSubmit.textContent = "作成";
     }
   }
@@ -584,7 +619,7 @@
       "researchProjectUrl", "researchFilesModal", "researchFilesPath", "researchFilesUpButton",
       "researchFilesReloadButton", "researchFilesList", "researchFilePreview", "researchFileSelectionCount",
       "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSelectionInstruction", "researchSolInstruction", "researchPacketSources",
-      "researchPacketSubmit", "researchPacketResult", "researchPacketOutput", "researchPacketCopyButton",
+      "researchPacketSubmit", "researchPacketProgress", "researchPacketProgressText", "researchPacketElapsed", "researchPacketResult", "researchPacketOutput", "researchPacketCopyButton",
       "researchPacketSolButton",
     ].forEach((id) => { elements[id] = $(id); });
   }
