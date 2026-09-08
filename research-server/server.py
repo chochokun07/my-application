@@ -37,7 +37,7 @@ DEFAULT_ALLOWED_ORIGINS = [
 MAX_REQUEST_BYTES = 1_000_000
 MAX_PREVIEW_BYTES = 1_500_000
 MAX_DOWNLOAD_BYTES = 100_000_000
-MAX_PACKET_CHARS = 24_000
+MAX_PACKET_CHARS = 9_000
 MAX_CANDIDATE_FILES = 240
 CANDIDATE_EXCERPT_CHARS = 300
 DETAIL_EXCERPT_CHARS = 900
@@ -369,7 +369,11 @@ class ResearchRepository:
                     resolved = str(npm_codex)
             if resolved:
                 command_parts[0] = resolved
-        sys.stderr.write(f"[Research Packet] Luna start: {stage or 'packet-command'}\n")
+        timeout_seconds = 90 if stage.endswith("selection") else 120
+        sys.stderr.write(
+            f"[Research Packet] Luna start: {stage or 'packet-command'} "
+            f"(timeout {timeout_seconds}s)\n"
+        )
         try:
             completed = subprocess.run(
                 command_parts,
@@ -378,18 +382,19 @@ class ResearchRepository:
                 encoding="utf-8",
                 errors="replace",
                 capture_output=True,
-                timeout=180,
+                timeout=timeout_seconds,
                 check=True,
                 cwd=self.root,
             )
             output = completed.stdout.strip()
             sys.stderr.write(f"[Research Packet] Luna finished: {stage or 'packet-command'} ({len(output)} chars)\n")
             if trace is not None:
-                trace.setdefault("luna_calls", []).append({
-                    "stage": stage,
-                    "status": "ok",
-                    "response": output,
-                })
+                call = {"stage": stage, "status": "ok"}
+                if stage.endswith("selection"):
+                    call["response"] = output
+                else:
+                    call["response_chars"] = len(output)
+                trace.setdefault("luna_calls", []).append(call)
             return output
         except subprocess.CalledProcessError as error:
             detail = error.stderr[-2000:]
@@ -631,7 +636,7 @@ class ResearchRepository:
         used = 0
         for relative in files:
             try:
-                text = self.read_packet_source(relative)[:5000]
+                text = self.read_packet_source(relative)[:1200]
             except (FileNotFoundError, ValueError, OSError):
                 continue
             remaining = MAX_PACKET_CHARS - used
@@ -659,7 +664,7 @@ class ResearchRepository:
         facts, interpretations, results = [], [], []
         for relative in files:
             try:
-                excerpt = self.read_packet_source(relative)[:3500].strip()
+                excerpt = self.read_packet_source(relative)[:1200].strip()
             except (FileNotFoundError, ValueError, OSError):
                 continue
             block = f"### {relative}\n{excerpt}"
@@ -764,8 +769,11 @@ class ResearchHandler(BaseHTTPRequestHandler):
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-        self.end_headers()
-        self.wfile.write(encoded)
+        try:
+            self.end_headers()
+            self.wfile.write(encoded)
+        except (BrokenPipeError, ConnectionAbortedError):
+            sys.stderr.write("[Research Packet] client disconnected before response\n")
 
     def send_file(self, path: Path) -> None:
         size = path.stat().st_size
