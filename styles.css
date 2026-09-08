@@ -3364,3 +3364,127 @@ select:hover {
   .research-plan-detail-grid { grid-template-columns: 1fr; }
   .research-plan-detail-modal { width: min(calc(100vw - 18px), 820px); max-height: calc(100vh - 18px); padding: 18px; border-radius: 18px; }
 }
+
+/* 研究ページ改善: 時間軸の表示範囲とモーダル階層 */
+.research-panel-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.research-timeline-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-dark);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.research-timeline-range select {
+  min-height: 34px;
+  padding: 5px 28px 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+}
+
+.research-timeline-scroll {
+  min-height: 300px;
+}
+
+.research-timeline-axis {
+  min-height: 275px;
+}
+
+.research-timeline-line {
+  left: 2%;
+  right: 2%;
+}
+
+.research-timeline-tick {
+  top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 145px;
+}
+
+.research-timeline-tick strong {
+  color: var(--ink);
+  font-size: 0.76rem;
+}
+
+.research-timeline-tick small {
+  color: var(--muted-dark);
+  font-size: 0.68rem;
+}
+
+.research-timeline-card {
+  top: 98px;
+}
+
+.research-timeline-overflow {
+  position: absolute;
+  top: 98px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 142px;
+  min-height: 94px;
+  padding: 13px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 14px;
+  background: rgba(235, 231, 221, 0.92);
+  color: var(--muted-dark);
+  box-shadow: 0 8px 24px rgba(32, 48, 45, 0.05);
+  transform: translateX(-100%);
+}
+
+.research-timeline-overflow strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.research-timeline-overflow span {
+  font-size: 0.72rem;
+}
+
+.research-timeline-overflow.is-past {
+  transform: none;
+}
+
+.research-timeline-overflow.is-future {
+  border-color: rgba(217, 128, 85, 0.38);
+  background: #fff0e9;
+}
+
+.research-timeline-overflow.is-invalid {
+  left: 50% !important;
+  border-color: rgba(244, 201, 93, 0.58);
+  background: #fffbe8;
+  transform: translateX(-50%);
+}
+
+#researchPlanModal {
+  z-index: 40;
+}
+
+@media (max-width: 680px) {
+  .research-panel-heading {
+    align-items: flex-start;
+  }
+
+  .research-panel-heading-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .research-timeline-scroll {
+    min-width: 680px;
+  }
+}
