@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import shlex
+import shutil
 import subprocess
 import sys
 import uuid
@@ -43,6 +44,7 @@ DETAIL_EXCERPT_CHARS = 900
 COARSE_SELECTION_LIMIT = 20
 COARSE_PRIMARY_LIMIT = 14
 COARSE_SECONDARY_LIMIT = COARSE_SELECTION_LIMIT - COARSE_PRIMARY_LIMIT
+PAPER_SUMMARY_FILENAMES = ("要約.md", "summary.md")
 
 
 def utc_iso(timestamp: float | None = None) -> str:
@@ -226,9 +228,10 @@ class ResearchRepository:
             return None
         if paper.suffix.lower() != ".pdf":
             return None
-        summary = paper.with_name("要約.md")
-        if summary.is_file() and self.is_text(summary):
-            return self.relative(summary)
+        for filename in PAPER_SUMMARY_FILENAMES:
+            summary = paper.with_name(filename)
+            if summary.is_file() and self.is_text(summary):
+                return self.relative(summary)
         return None
 
     def content_path_for_packet(self, relative: str) -> str:
@@ -262,14 +265,18 @@ class ResearchRepository:
                 continue
 
             # A paper is selected logically as its PDF, while Luna reads its paired summary.
+            in_papers = relative.as_posix().startswith("database/papers/")
+            if in_papers and relative.name == "metadata.yaml":
+                continue
             paper_paths = sorted(path.parent.glob("*.pdf")) if (
-                relative.name == "要約.md" and relative.as_posix().startswith("database/papers/")
+                relative.name in PAPER_SUMMARY_FILENAMES and in_papers
             ) else []
             if paper_paths:
-                logical_path = self.relative(paper_paths[0])
+                paper = next((item for item in paper_paths if item.stem == path.parent.name), paper_paths[0])
+                logical_path = self.relative(paper)
                 content_path = relative.as_posix()
                 source_type = "paper"
-                name = paper_paths[0].name
+                name = paper.name
             else:
                 logical_path = relative.as_posix()
                 content_path = logical_path
@@ -324,9 +331,15 @@ class ResearchRepository:
         command = self.config["packet_command"]
         if not command:
             return ""
+        command_parts = shlex.split(command, posix=os.name != "nt")
+        if os.name == "nt" and command_parts:
+            # PowerShell resolves codex.cmd through PATHEXT, while CreateProcess does not.
+            resolved = shutil.which(command_parts[0]) or shutil.which(f"{command_parts[0]}.cmd")
+            if resolved:
+                command_parts[0] = resolved
         try:
             completed = subprocess.run(
-                shlex.split(command, posix=os.name != "nt"),
+                command_parts,
                 input=prompt,
                 text=True,
                 encoding="utf-8",
@@ -337,8 +350,11 @@ class ResearchRepository:
                 cwd=self.root,
             )
             return completed.stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            return ""
+        except subprocess.CalledProcessError as error:
+            sys.stderr.write(f"[Research Packet] packet_command failed: {error.stderr[-2000:]}\n")
+        except (OSError, subprocess.TimeoutExpired) as error:
+            sys.stderr.write(f"[Research Packet] packet_command could not run: {error}\n")
+        return ""
 
     def selection_prompt(
         self,
