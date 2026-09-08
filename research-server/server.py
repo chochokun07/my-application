@@ -335,6 +335,10 @@ class ResearchRepository:
         if os.name == "nt" and command_parts:
             # PowerShell resolves codex.cmd through PATHEXT, while CreateProcess does not.
             resolved = shutil.which(command_parts[0]) or shutil.which(f"{command_parts[0]}.cmd")
+            if not resolved and command_parts[0].lower() == "codex":
+                npm_codex = Path(os.environ.get("APPDATA", "")) / "npm" / "codex.cmd"
+                if npm_codex.is_file():
+                    resolved = str(npm_codex)
             if resolved:
                 command_parts[0] = resolved
         try:
