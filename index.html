@@ -1011,8 +1011,8 @@
         </div>
         <form id="researchPacketForm" class="research-form">
           <label class="field-span-2">
-            今回考えたい問題 <span class="required-mark">*</span>
-            <textarea id="researchPacketProblem" rows="4" maxlength="4000" required placeholder="Solに考えさせたい問題を入力"></textarea>
+            Lunaに整理させる研究上の問題 <span class="required-mark">*</span>
+            <textarea id="researchPacketProblem" rows="4" maxlength="4000" required placeholder="今回のResearch Packetで整理したい研究上の問題を入力"></textarea>
           </label>
           <label class="field-span-2">
             資料の取得指示
@@ -1027,6 +1027,12 @@
           </div>
         </form>
         <div id="researchPacketResult" class="research-packet-result" hidden>
+          <label class="field-span-2 research-sol-instruction-field">
+            Solへの分析指示（任意）
+            <textarea id="researchSolInstruction" rows="4" maxlength="4000" placeholder="例：この結果が研究全体の目的にどう関係するか、仮説と新しい研究方向を検討してください。"></textarea>
+            <small class="field-help">資料のパス指定は不要です。作成済みのResearch Packetだけを使って分析します。</small>
+          </label>
+          <p class="research-bridge-help">Lunaが作成したResearch Packet（資料整理の結果）</p>
           <textarea id="researchPacketOutput" rows="18" readonly></textarea>
           <div class="modal-actions">
             <button id="researchPacketCopyButton" class="secondary-button" type="button">コピー</button>
