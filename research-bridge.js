@@ -283,13 +283,13 @@
 
   function closeModal(element) {
     element.hidden = true;
-    if (![elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal, elements.researchSummaryDetailModal].some((modal) => !modal.hidden)) {
+    if (![elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal, elements.researchSolUnavailableModal, elements.researchSummaryDetailModal].some((modal) => !modal.hidden)) {
       document.body.classList.remove("modal-open");
     }
   }
 
   function closeAllBridgeModals() {
-    [elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal, elements.researchSummaryDetailModal].forEach(closeModal);
+    [elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal, elements.researchSolUnavailableModal, elements.researchSummaryDetailModal].forEach(closeModal);
   }
 
   function openSettings() {
@@ -480,7 +480,7 @@
   async function openSol() {
     const markdown = state.latestPacket?.markdown || elements.researchPacketOutput.value;
     if (!markdown) {
-      openPacketModal();
+      openModal(elements.researchSolUnavailableModal);
       return;
     }
     const instruction = elements.researchSolInstruction.value.trim();
@@ -562,7 +562,7 @@
       "researchCurrentState", "researchStateSource", "researchRecentRecords", "researchFilesButton",
       "researchPacketButton", "researchSolButton", "researchServerRefreshButton", "researchServerSettingsButton",
       "researchSolResponse", "researchSaveDraftButton", "researchAdoptButton", "researchAdoptionStatus",
-      "researchServerSettingsModal", "researchSummaryDetailModal", "researchSummaryDetailTitle", "researchSummaryDetailBody", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
+      "researchServerSettingsModal", "researchSolUnavailableModal", "researchSummaryDetailModal", "researchSummaryDetailTitle", "researchSummaryDetailBody", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
       "researchProjectUrl", "researchFilesModal", "researchFilesPath", "researchFilesUpButton",
       "researchFilesReloadButton", "researchFilesList", "researchFilePreview", "researchFileSelectionCount",
       "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSelectionInstruction", "researchSolInstruction", "researchPacketSources",
@@ -599,6 +599,10 @@
     elements.researchPacketForm.addEventListener("submit", createPacket);
     elements.researchPacketCopyButton.addEventListener("click", () => copyText(elements.researchPacketOutput.value));
     elements.researchPacketSolButton.addEventListener("click", openSol);
+    elements.researchSolCreatePacketButton.addEventListener("click", () => {
+      closeModal(elements.researchSolUnavailableModal);
+      openPacketModal();
+    });
     elements.researchSaveDraftButton.addEventListener("click", saveSolDraft);
     elements.researchAdoptButton.addEventListener("click", adoptSolResponse);
     elements.researchFilesList.addEventListener("click", handleFilesClick);
@@ -617,7 +621,7 @@
       closeModal(elements.researchFilesModal);
       openPacketModal();
     }));
-    [elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal].forEach((modal) => {
+    [elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal, elements.researchSolUnavailableModal].forEach((modal) => {
       modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(modal); });
     });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeAllBridgeModals(); });
