@@ -253,7 +253,7 @@
             <p class="page-subtitle">動画ごとの構想と台本を、同じプロジェクトで管理します。</p>
           </div>
           <div class="page-heading-actions">
-            <button class="primary-button" type="button" data-hobby-action="add-project"><span class="button-plus">＋</span><span>プロジェクトを追加</span></button>
+            <button id="hobbySettingsButton" class="icon-button hobby-settings-button" type="button" data-hobby-action="open-settings" aria-label="趣味ページの設定">⚙</button>
           </div>
         </div>
 
@@ -269,7 +269,7 @@
                 <p class="section-kicker">PROJECTS</p>
                 <h2>プロジェクト</h2>
               </div>
-              <span class="hobby-panel-count">構想＋台本</span>
+              <button id="hobbyProjectManageButton" class="hobby-panel-action" type="button" data-hobby-action="open-settings-project">PJ管理</button>
             </div>
             <div id="hobbyProjectList" class="hobby-project-list"></div>
             <div id="hobbyProjectEmpty" class="hobby-empty-state" hidden>
@@ -286,7 +286,6 @@
               </div>
               <div id="hobbyProjectActions" class="hobby-project-actions" hidden>
                 <button class="text-button" type="button" data-hobby-action="edit-project">名称変更</button>
-                <button id="hobbyIdentityModeButton" class="text-button" type="button" data-hobby-action="make-identity">特色人格構想にする</button>
                 <button class="hobby-danger-button" type="button" data-hobby-action="delete-project">削除</button>
               </div>
             </header>
@@ -381,24 +380,52 @@
                     </label>
                   </div>
 
-                  <div class="hobby-speaker-box">
-                    <div class="hobby-subpanel-heading">
-                      <div>
-                        <p class="hobby-pane-kicker">SPEAKERS</p>
-                        <h3>話者</h3>
-                      </div>
-                    </div>
-                    <div class="hobby-speaker-add">
-                      <input id="hobbySpeakerInput" type="text" placeholder="話者名" />
-                      <button class="secondary-button" type="button" data-hobby-action="add-speaker">追加</button>
-                    </div>
-                    <ul id="hobbySpeakerList" class="hobby-speaker-list"></ul>
-                  </div>
+>
                 </div>
               </div>
             </div>
           </section>
         </div>
+        <div id="hobbySettingsMenu" class="hobby-settings-menu" hidden>
+          <div class="hobby-settings-backdrop" data-hobby-action="close-settings"></div>
+          <section class="hobby-settings-panel" role="dialog" aria-modal="true" aria-labelledby="hobbySettingsTitle">
+            <header class="hobby-settings-header">
+              <div>
+                <p class="hobby-pane-kicker">SETTINGS</p>
+                <h2 id="hobbySettingsTitle">趣味の設定</h2>
+              </div>
+              <button class="icon-button" type="button" data-hobby-action="close-settings" aria-label="設定を閉じる">×</button>
+            </header>
+            <nav class="hobby-settings-tabs" aria-label="趣味の設定項目">
+              <button class="hobby-settings-tab is-active" type="button" data-hobby-action="open-settings-project">PJ管理</button>
+              <button class="hobby-settings-tab" type="button" data-hobby-action="open-settings-speakers">話者</button>
+            </nav>
+            <div id="hobbySettingsProjectPanel" class="hobby-settings-content">
+              <div class="hobby-settings-content-heading">
+                <div>
+                  <h3>プロジェクト管理</h3>
+                  <p>ドラッグして順番を並び替えられます。</p>
+                </div>
+                <button class="primary-button" type="button" data-hobby-action="add-project">＋ PJ追加</button>
+              </div>
+              <div id="hobbyProjectManageList" class="hobby-project-manage-list"></div>
+            </div>
+            <div id="hobbySettingsSpeakerPanel" class="hobby-settings-content" hidden>
+              <div class="hobby-settings-content-heading">
+                <div>
+                  <h3>話者管理</h3>
+                  <p>台本で使う話者を登録します。</p>
+                </div>
+              </div>
+              <div class="hobby-speaker-add">
+                <input id="hobbySettingsSpeakerInput" type="text" placeholder="話者名" />
+                <button class="secondary-button" type="button" data-hobby-action="add-speaker">追加</button>
+              </div>
+              <ul id="hobbySettingsSpeakerList" class="hobby-speaker-list"></ul>
+            </div>
+          </section>
+        </div>
+
       </section>
 
       <section id="creationPage" class="page-view blank-page" data-page-view="creation" hidden aria-labelledby="creationPageTitle">
