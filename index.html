@@ -720,7 +720,7 @@
           <label class="toggle-field field-span-2">
             <input id="taskReminderEnabled" type="checkbox" />
             <span class="toggle-control" aria-hidden="true"></span>
-            <span>通知を有効にする <small>（通知機能は今後対応）</small></span>
+            <span>通知を有効にする <small>（この端末のブラウザ通知）</small></span>
           </label>
           <div class="modal-actions field-span-2">
             <button id="deleteTaskButton" class="danger-button" type="button" hidden>削除</button>
@@ -1020,6 +1020,14 @@
             <small class="field-help">参照するフォルダー、期間、キーワード、含めたい資料・除外したい資料を文章で指定できます。空欄の場合は、手動選択または最近の研究記録を使います。</small>
           </label>
           <p id="researchPacketSources" class="research-bridge-help field-span-2">取得指示に基づき、Lunaが研究フォルダーから資料を選定します。</p>
+          <div id="researchPacketProgress" class="research-packet-progress" hidden role="status" aria-live="polite">
+            <span class="research-packet-progress-spinner" aria-hidden="true"></span>
+            <span class="research-packet-progress-copy">
+              <strong>Lunaが資料を整理中です</strong>
+              <span id="researchPacketProgressText">候補資料を選定しています…</span>
+            </span>
+            <time id="researchPacketElapsed">0秒経過</time>
+          </div>
           <div class="modal-actions field-span-2">
             <span class="action-spacer"></span>
             <button class="secondary-button" type="button" data-research-bridge-close>キャンセル</button>
