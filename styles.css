@@ -1835,6 +1835,11 @@ select:hover {
 
   .topbar-actions {
     min-width: 0;
+    gap: 8px;
+  }
+
+  .settings-text-button {
+    font-size: 11px;
   }
 
   .brand-overline {
@@ -2822,9 +2827,22 @@ select:hover {
 
 
 /* Global application settings */
-.app-settings-button {
+.settings-text-button {
   flex: 0 0 auto;
-  font-size: 16px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.settings-text-button:hover {
+  color: var(--muted-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .app-settings-menu {
