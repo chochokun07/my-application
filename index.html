@@ -697,25 +697,95 @@
             </select>
           </label>
           <label class="field-span-2">
-            目的・向かう先
-            <textarea id="researchPlanObjective" maxlength="1200" rows="3" placeholder="このプランで明らかにしたいこと"></textarea>
+            発端｜解決したい疑問点
+            <textarea id="researchPlanObjective" maxlength="1600" rows="3" placeholder="何を明らかにしたいのか、どの疑問を解決したいのか"></textarea>
+          </label>
+          <label class="field-span-2">
+            発端｜現在確認されている事実・根拠
+            <textarea id="researchPlanOriginFacts" maxlength="2000" rows="4" placeholder="すでに確認できている事実、観測、文献・実験データの根拠"></textarea>
+          </label>
+          <label class="field-span-2">
+            仮説
+            <textarea id="researchPlanHypothesis" maxlength="1600" rows="3" placeholder="現時点で考えている説明や見通し"></textarea>
+          </label>
+          <label class="field-span-2">
+            仮説の根拠
+            <textarea id="researchPlanHypothesisBasis" maxlength="2000" rows="4" placeholder="その仮説を置く理由、事実とのつながり"></textarea>
           </label>
           <label>
             目標日
             <input id="researchPlanTargetDate" type="date" />
           </label>
-          <label>
-            次にやること
-            <input id="researchPlanNextAction" type="text" maxlength="240" placeholder="例：条件Aの再現実験を行う" />
-          </label>
+          <input id="researchPlanNextAction" type="hidden" />
           <label class="field-span-2">
-            メモ
-            <textarea id="researchPlanNotes" maxlength="1600" rows="4" placeholder="判断材料や保留事項"></textarea>
+            補足メモ
+            <textarea id="researchPlanNotes" maxlength="1600" rows="4" placeholder="判断材料、保留事項、追加メモ"></textarea>
           </label>
           <div class="modal-actions field-span-2">
             <button id="deleteResearchPlanButton" class="danger-button" type="button" hidden>削除</button>
             <span class="action-spacer"></span>
             <button id="cancelResearchPlanButton" class="secondary-button" type="button">キャンセル</button>
+            <button class="primary-button" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="researchTaskDetailModal" class="modal-backdrop research-task-detail-backdrop" hidden>
+      <section class="research-task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="researchTaskDetailTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">RESEARCH TASK</p>
+            <h2 id="researchTaskDetailTitle">進捗タスクを追加</h2>
+            <p id="researchTaskDetailContext" class="research-task-detail-context"></p>
+          </div>
+          <button id="closeResearchTaskDetail" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <form id="researchTaskDetailForm" class="research-form">
+          <label class="field-span-2">
+            タスク名 <span class="required-mark">*</span>
+            <input id="researchTaskDetailName" type="text" maxlength="120" required placeholder="例：条件Aの再現実験を行う" />
+          </label>
+          <label>
+            状態
+            <select id="researchTaskDetailStatus">
+              <option value="todo" selected>未着手</option>
+              <option value="in_progress">進行中</option>
+              <option value="on_hold">保留</option>
+              <option value="completed">完了</option>
+            </select>
+          </label>
+          <label>
+            紐付けるプラン
+            <select id="researchTaskDetailPlan">
+              <option value="">紐付けない</option>
+            </select>
+          </label>
+          <label>
+            期限
+            <input id="researchTaskDetailDueDate" type="date" />
+          </label>
+          <label>
+            優先度
+            <select id="researchTaskDetailPriority">
+              <option value="low">低</option>
+              <option value="medium" selected>中</option>
+              <option value="high">高</option>
+            </select>
+          </label>
+          <label class="field-span-2">
+            作業内容・確認したいこと
+            <textarea id="researchTaskDetailMemo" maxlength="2400" rows="5" placeholder="このタスクで何を実施・確認するのか"></textarea>
+          </label>
+          <label class="field-span-2">
+            実施結果・レポート
+            <textarea id="researchTaskDetailReport" maxlength="4000" rows="8" placeholder="実施したこと、得られた結果、判断、次に残った論点"></textarea>
+          </label>
+          <div class="modal-actions field-span-2">
+            <button id="deleteResearchTaskDetail" class="danger-button" type="button" hidden>削除</button>
+            <button id="completeResearchTaskDetail" class="secondary-button" type="button" hidden>完了にする</button>
+            <span class="action-spacer"></span>
+            <button id="cancelResearchTaskDetail" class="secondary-button" type="button">キャンセル</button>
             <button class="primary-button" type="submit">保存</button>
           </div>
         </form>
