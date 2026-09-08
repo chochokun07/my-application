@@ -65,6 +65,7 @@
     editingPlanId: null,
     editingScheduleId: null,
     editingResearchTaskId: null,
+    researchPlanDetailId: null,
     researchRemoteAvailable: true,
     researchTaskSchemaAvailable: true,
     researchPlanSchemaAvailable: true,
@@ -202,7 +203,15 @@
     researchScheduleKind: $("researchScheduleKind"),
     researchSchedulePlan: $("researchSchedulePlan"),
     researchScheduleNotes: $("researchScheduleNotes"),
-     researchTaskDetailModal: $("researchTaskDetailModal"),
+     researchPlanDetailModal: $("researchPlanDetailModal"),
+    researchPlanDetailTitle: $("researchPlanDetailTitle"),
+    researchPlanDetailBody: $("researchPlanDetailBody"),
+    researchPlanDetailTaskList: $("researchPlanDetailTaskList"),
+    closeResearchPlanDetail: $("closeResearchPlanDetail"),
+    closeResearchPlanDetailButton: $("closeResearchPlanDetailButton"),
+    addResearchPlanDetailTask: $("addResearchPlanDetailTask"),
+    editResearchPlanFromDetail: $("editResearchPlanFromDetail"),
+    researchTaskDetailModal: $("researchTaskDetailModal"),
      researchTaskDetailTitle: $("researchTaskDetailTitle"),
      researchTaskDetailForm: $("researchTaskDetailForm"),
      researchTaskDetailName: $("researchTaskDetailName"),
@@ -1229,68 +1238,86 @@
   }
 
   function renderResearchPlan(plan) {
-    const planTasks = state.tasks.filter((task) => task.researchPlanId === plan.id);
-    const openTasks = sortActivityTasks(planTasks.filter((task) => task.status !== "completed"));
-    const completedTaskCount = planTasks.filter((task) => task.status === "completed").length;
-    const originQuestion = plan.objective || "解決したい疑問点はまだ記録されていません。";
-    const originFacts = plan.originFacts || "確認されている事実・根拠はまだ記録されていません。";
-    const hypothesis = plan.hypothesis || "仮説はまだ記録されていません。";
-    const hypothesisBasis = plan.hypothesisBasis || "仮説の根拠はまだ記録されていません。";
-    const taskList = openTasks.length
-      ? openTasks.map((task) => `
-          <button class="research-plan-task" type="button" data-research-action="open-task" data-task-id="${escapeHtml(task.id)}">
+    const planTasks = state.tasks.filter((task) => task.researchPlanId === plan.id && task.status !== "completed");
+    const prioritizedTasks = [...planTasks].sort((a, b) => {
+      const priorityDifference = (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1);
+      if (priorityDifference !== 0) return priorityDifference;
+      return (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31");
+    });
+    const topTasks = prioritizedTasks.slice(0, 3);
+    const progress = topTasks.length
+      ? topTasks.map((task) => `
+          <div class="research-plan-priority-task">
             <span class="research-plan-task-status" aria-hidden="true"></span>
-            <span class="research-plan-task-title">${escapeHtml(task.title)}</span>
-            <span class="research-plan-task-arrow" aria-hidden="true">→</span>
-          </button>
+            <span class="research-plan-priority-label">${{escapeHtml(PRIORITY_LABELS[task.priority])}</span>
+            <span class="research-plan-task-title">${{escapeHtml(task.title)}</span>
+          </div>
         `).join("")
-      : '<p class="research-plan-task-empty">未完了の進捗タスクはありません。</p>';
+      : '<span class="research-plan-task-empty">進捗タスクはありません。</span>';
 
     return `
-      <article class="research-plan-item" data-plan-id="${escapeHtml(plan.id)}">
+      <article class="research-plan-item research-plan-summary" data-plan-id="${{escapeHtml(plan.id)}" data-research-action="open-plan" tabindex="0" role="button">
         <div class="research-item-body">
           <div class="research-item-title-row">
-            <h3>${escapeHtml(plan.title)}</h3>
-            <span class="status-chip research-status-${escapeHtml(plan.status)}">${escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
+            <h3>${{escapeHtml(plan.title)}</h3>
+            <span class="status-chip research-status-${{escapeHtml(plan.status)}">${{escapeHtml(PLAN_STATUS_LABELS[plan.status])}</span>
           </div>
-          <div class="research-plan-sections">
-            <section class="research-plan-section">
-              <span class="research-plan-section-label">発端｜解決したい疑問点</span>
-              <p>${escapeHtml(originQuestion)}</p>
-            </section>
-            <section class="research-plan-section">
-              <span class="research-plan-section-label">発端｜確認されている事実・根拠</span>
-              <p>${escapeHtml(originFacts)}</p>
-            </section>
-            <section class="research-plan-section">
-              <span class="research-plan-section-label">仮説</span>
-              <p>${escapeHtml(hypothesis)}</p>
-            </section>
-            <section class="research-plan-section">
-              <span class="research-plan-section-label">仮説の根拠</span>
-              <p>${escapeHtml(hypothesisBasis)}</p>
-            </section>
-          </div>
-          <div class="research-plan-progress">
-            <div class="research-plan-progress-heading">
-              <div>
-                <span class="research-plan-section-label">進捗タスク</span>
-                <strong>${openTasks.length}件が進行中</strong>
-              </div>
-              <button class="small-action-button" type="button" data-research-action="add-plan-task">＋ タスク追加</button>
-            </div>
-            <div class="research-plan-task-list">${taskList}</div>
-            <div class="research-item-meta">
-              <span>${escapeHtml(formatTargetDate(plan.targetDate))}</span>
-              <span>完了済み ${completedTaskCount}件</span>
-            </div>
+          <div class="research-plan-summary-progress">
+            <span class="research-plan-section-label">優先度上位の進捗</span>
+            <div class="research-plan-priority-list">${{progress}</div>
           </div>
         </div>
         <div class="research-item-actions">
+          <span class="research-plan-open-hint">詳細を見る →</span>
           <button class="task-action" type="button" data-research-action="edit-plan">編集</button>
           <button class="task-action delete" type="button" data-research-action="delete-plan">削除</button>
         </div>
       </article>
+    `;
+  }
+
+  function renderResearchTimeline(schedules) {
+    if (!schedules.length) return "";
+    const items = schedules.map((schedule) => ({
+      schedule,
+      date: new Date(schedule.scheduledAt),
+    }));
+    const datedItems = items.filter((item) => !Number.isNaN(item.date.getTime()));
+    const minTime = datedItems.length ? Math.min(...datedItems.map((item) => item.date.getTime())) : Date.now();
+    const maxTime = datedItems.length ? Math.max(...datedItems.map((item) => item.date.getTime())) : minTime + 86400000;
+    const span = Math.max(maxTime - minTime, 86400000);
+    const timelineItems = items.map((item) => {
+      const ratio = Number.isNaN(item.date.getTime()) ? 0.5 : (item.date.getTime() - minTime) / span;
+      const schedule = item.schedule;
+      const plan = getPlanById(schedule.planId);
+      return `
+        <article class="research-timeline-card" data-schedule-id="${{escapeHtml(schedule.id)}" style="--timeline-position: ${{Math.max(3, Math.min(97, ratio * 100))}%">
+          <time datetime="${{escapeHtml(schedule.scheduledAt)}">${{escapeHtml(formatScheduleDateTime(schedule.scheduledAt))}</time>
+          <strong>${{escapeHtml(schedule.title)}</strong>
+          <span>${{escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind])}${{plan ? " · " + escapeHtml(plan.title) : ""}</span>
+          <div class="research-item-actions">
+            <button class="task-action" type="button" data-research-action="edit-schedule">編集</button>
+            <button class="task-action delete" type="button" data-research-action="delete-schedule">削除</button>
+          </div>
+        </article>
+      `;
+    }).join("");
+
+    const ticks = items.map((item) => {
+      const ratio = Number.isNaN(item.date.getTime()) ? 50 : Math.max(3, Math.min(97, ((item.date.getTime() - minTime) / span) * 100));
+      return `<span class="research-timeline-tick" style="left: ${{ratio}%">${{escapeHtml(formatScheduleDateTime(item.schedule.scheduledAt))}</span>`;
+    }).join("");
+
+    return `
+      <div class="research-timeline">
+        <div class="research-timeline-scroll">
+          <div class="research-timeline-axis">
+            <span class="research-timeline-line" aria-hidden="true"></span>
+            ${{ticks}
+            ${{timelineItems}
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -1398,7 +1425,7 @@
     elements.researchDataNotice.hidden = noticeMessages.length === 0;
     elements.researchDataNoticeText.textContent = noticeMessages.join(" ");
 
-    elements.researchScheduleList.innerHTML = sortedSchedules.map(renderResearchSchedule).join("");
+    elements.researchScheduleList.innerHTML = renderResearchTimeline(sortedSchedules);
     elements.researchScheduleList.hidden = sortedSchedules.length === 0;
     elements.researchScheduleEmpty.hidden = sortedSchedules.length !== 0;
 
@@ -1841,11 +1868,54 @@
         state.tasks = state.tasks.map((task) => task.researchPlanId === planId ? { ...task, researchPlanId: "" } : task);
       }
       closeResearchPlanModal();
+      if (state.researchPlanDetailId === planId) closeResearchPlanDetail();
       updateResearchPlanSelectors();
       render();
       showToast("研究プランを削除しました");
     } catch (error) {
       showToast(toFriendlyError(error), true);
+    }
+  }
+
+  function renderResearchPlanDetail(plan) {
+    if (!plan) return;
+    const planTasks = state.tasks.filter((task) => task.researchPlanId === plan.id);
+    const body = `
+      <div class="research-plan-detail-grid">
+        <section><span>発端｜解決したい疑問点</span><p>${{escapeHtml(plan.objective || "未記録")}</p></section>
+        <section><span>発端｜確認されている事実・根拠</span><p>${{escapeHtml(plan.originFacts || "未記録")}</p></section>
+        <section><span>仮説</span><p>${{escapeHtml(plan.hypothesis || "未記録")}</p></section>
+        <section><span>仮説の根拠</span><p>${{escapeHtml(plan.hypothesisBasis || "未記録")}</p></section>
+      </div>
+      <p class="research-plan-detail-meta">${{escapeHtml(formatTargetDate(plan.targetDate))} · ${{escapeHtml(PLAN_STATUS_LABELS[plan.status])}</p>
+    `;
+    elements.researchPlanDetailBody.innerHTML = body;
+    const sortedTasks = sortActivityTasks(planTasks);
+    elements.researchPlanDetailTaskList.innerHTML = sortedTasks.length
+      ? sortedTasks.map((task) => `
+          <button class="research-plan-detail-task" type="button" data-research-detail-action="open-task" data-task-id="${{escapeHtml(task.id)}">
+            <span class="research-plan-task-status ${{task.status === "completed" ? "is-completed" : ""}" aria-hidden="true"></span>
+            <span class="research-plan-task-title">${{escapeHtml(task.title)}</span>
+            <span class="research-plan-detail-task-status">${{escapeHtml(STATUS_LABELS[task.status])}</span>
+          </button>
+        `).join("")
+      : '<p class="research-plan-task-empty">タスクはまだありません。</p>';
+  }
+
+  function openResearchPlanDetail(plan) {
+    if (!plan) return;
+    state.researchPlanDetailId = plan.id;
+    elements.researchPlanDetailTitle.textContent = plan.title;
+    renderResearchPlanDetail(plan);
+    elements.researchPlanDetailModal.hidden = false;
+    document.body.classList.add("modal-open");
+  }
+
+  function closeResearchPlanDetail() {
+    elements.researchPlanDetailModal.hidden = true;
+    state.researchPlanDetailId = null;
+    if (elements.researchPlanModal.hidden && elements.researchScheduleModal.hidden && elements.researchTaskDetailModal.hidden) {
+      document.body.classList.remove("modal-open");
     }
   }
 
@@ -1932,6 +2002,7 @@
       }
       closeResearchTaskDetail();
       render();
+      if (state.researchPlanDetailId) renderResearchPlanDetail(getPlanById(state.researchPlanDetailId));
       showToast(task.status === "completed" ? "進捗タスクを完了しました" : (isEditing ? "進捗タスクを更新しました" : "進捗タスクを追加しました"));
     } catch (error) {
       setSyncStatus("同期エラー", "error");
@@ -2160,11 +2231,24 @@
     if (emptyAction === "task") return openResearchTaskDetail(null, { researchPlanId: "" });
 
     const target = event.target.closest("[data-research-action]");
+    const detailTarget = event.target.closest("[data-research-detail-action]");
+    if (detailTarget) {
+      const detailAction = detailTarget.dataset.researchDetailAction;
+      if (detailAction === "open-task") {
+        const task = state.tasks.find((item) => item.id === detailTarget.dataset.taskId);
+        if (task) openResearchTaskDetail(task);
+      }
+      return;
+    }
     if (!target) return;
     const action = target.dataset.researchAction;
     const planCard = target.closest("[data-plan-id]");
     const scheduleCard = target.closest("[data-schedule-id]");
     const taskId = target.dataset.taskId;
+    if (action === "open-plan" && planCard) {
+      openResearchPlanDetail(state.plans.find((plan) => plan.id === planCard.dataset.planId));
+      return;
+    }
     if (action === "open-task" && taskId) {
       const task = state.tasks.find((item) => item.id === taskId);
       if (task) openResearchTaskDetail(task);
@@ -2224,6 +2308,13 @@
       if (event.target === elements.taskModal) closeTaskModal();
     });
     elements.researchPlanForm.addEventListener("submit", saveResearchPlan);
+    elements.closeResearchPlanDetail.addEventListener("click", closeResearchPlanDetail);
+    elements.closeResearchPlanDetailButton.addEventListener("click", closeResearchPlanDetail);
+    elements.addResearchPlanDetailTask.addEventListener("click", () => openResearchTaskDetail(null, { researchPlanId: state.researchPlanDetailId || "" }));
+    elements.editResearchPlanFromDetail.addEventListener("click", () => openResearchPlanModal(getPlanById(state.researchPlanDetailId)));
+    elements.researchPlanDetailModal.addEventListener("click", (event) => {
+      if (event.target === elements.researchPlanDetailModal) closeResearchPlanDetail();
+    });
     elements.closeResearchPlanModal.addEventListener("click", closeResearchPlanModal);
     elements.cancelResearchPlanButton.addEventListener("click", closeResearchPlanModal);
     elements.deleteResearchPlanButton.addEventListener("click", () => deleteResearchPlan(state.editingPlanId));
@@ -2289,6 +2380,7 @@
       else if (event.key === "Escape" && !elements.researchPlanModal.hidden) closeResearchPlanModal();
       else if (event.key === "Escape" && !elements.researchScheduleModal.hidden) closeResearchScheduleModal();
       else if (event.key === "Escape" && !elements.researchTaskDetailModal.hidden) closeResearchTaskDetail();
+      else if (event.key === "Escape" && !elements.researchPlanDetailModal.hidden) closeResearchPlanDetail();
       else if (event.key === "Escape" && document.body.classList.contains("sidebar-open")) closeSidebar();
       if (typing || elements.authShell.hidden === false) return;
       if (!["home", "todo"].includes(state.sidebarView)) return;
