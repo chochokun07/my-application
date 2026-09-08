@@ -172,19 +172,20 @@
           </div>
 
           <div class="research-hub-content">
-            <article class="research-hub-summary">
+            <article class="research-hub-summary research-hub-summary-clickable" data-research-summary-detail="state" tabindex="0" aria-label="現在の研究状態の詳細を見る">
               <span class="summary-label">現在の研究状態</span>
               <p id="researchCurrentState">まだ取得していません。</p>
               <small id="researchStateSource"></small>
+              <span class="research-summary-open-hint">クリックして詳細を見る →</span>
             </article>
-            <article class="research-hub-summary">
+            <article class="research-hub-summary research-hub-summary-clickable" data-research-summary-detail="records" tabindex="0" aria-label="最近の研究記録の詳細を見る">
               <span class="summary-label">最近の研究記録</span>
               <div id="researchRecentRecords" class="research-recent-records">
                 <p>まだ取得していません。</p>
               </div>
+              <span class="research-summary-open-hint">クリックして詳細を見る →</span>
             </article>
           </div>
-
           <div class="research-hub-actions">
             <button id="researchFilesButton" class="secondary-button" type="button">研究資料を見る</button>
             <button id="researchPacketButton" class="secondary-button" type="button">Research Packetを作成</button>
@@ -927,6 +928,22 @@
       </section>
     </div>
 
+    <div id="researchSummaryDetailModal" class="modal-backdrop" hidden>
+      <section class="research-modal research-summary-detail-modal" role="dialog" aria-modal="true" aria-labelledby="researchSummaryDetailTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">RESEARCH SUMMARY</p>
+            <h2 id="researchSummaryDetailTitle">研究詳細</h2>
+          </div>
+          <button class="icon-button close-button" type="button" data-research-bridge-close aria-label="閉じる">×</button>
+        </div>
+        <div id="researchSummaryDetailBody" class="research-summary-detail-body"></div>
+        <div class="modal-actions">
+          <span class="action-spacer"></span>
+          <button class="primary-button" type="button" data-research-bridge-close>閉じる</button>
+        </div>
+      </section>
+    </div>
     <div id="researchServerSettingsModal" class="modal-backdrop" hidden>
       <section class="research-modal research-bridge-modal" role="dialog" aria-modal="true" aria-labelledby="researchServerSettingsTitle">
         <div class="modal-header">

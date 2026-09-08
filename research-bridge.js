@@ -10,6 +10,8 @@
     selectedFiles: new Set(),
     currentPath: "",
     latestPacket: readJson(PACKET_KEY, null),
+    latestState: null,
+    latestRecords: [],
     online: false,
     refreshing: false,
   };
@@ -66,6 +68,29 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  function researchSummaryText(value) {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "object") {
+      const preferredKeys = ["summary", "overview", "current_state", "currentState", "current_position", "status", "message"];
+      for (const key of preferredKeys) {
+        if (value[key] !== undefined && value[key] !== null && String(value[key]).trim()) return researchSummaryText(value[key]);
+      }
+      return Object.entries(value)
+        .filter(([, item]) => item !== null && item !== undefined && typeof item !== "object")
+        .map(([key, item]) => `${key}: ${String(item)}`)
+        .join("\n");
+    }
+    let text = String(value).trim().replace(/^\`\`\`(?:json|markdown)?\s*/i, "").replace(/\s*\`\`\`$/, "").trim();
+    if ((text.startsWith("{") && text.endsWith("}")) || (text.startsWith("[") && text.endsWith("]"))) {
+      try { return researchSummaryText(JSON.parse(text)); } catch (_) {}
+    }
+    return text.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
+  }
+
+  function shortenResearchText(value, limit = 180) {
+    const text = researchSummaryText(value);
+    return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
+  }
   function setServerStatus(kind, message, checkedAt = "") {
     state.online = kind === "online";
     elements.researchServerDot.className = `research-server-dot is-${kind}`;
@@ -136,13 +161,13 @@
       .eq("user_id", cloud.user.id)
       .maybeSingle();
     if (error || !data) return;
-    if (data.state_summary) elements.researchCurrentState.textContent = data.state_summary;
+    state.latestState = { summary: data.state_summary || "" };
+    state.latestRecords = data.last_record_title ? [{ name: data.last_record_title, modified_at: data.last_sync_at, summary: "" }] : [];
+    elements.researchCurrentState.textContent = shortenResearchText(data.state_summary) || "研究状態の要約はまだありません。";
     elements.researchStateSource.textContent = data.last_sync_at
       ? `最終同期 ${formatDate(data.last_sync_at)}（サーバー停止中も表示）`
       : "";
-    if (data.last_record_title) {
-      elements.researchRecentRecords.innerHTML = `<div class="research-recent-record"><strong>${escapeHtml(data.last_record_title)}</strong><small>最終同期時の記録</small></div>`;
-    }
+    renderRecords(state.latestRecords);
   }
 
   async function saveCloudSummary(serverState, records) {
@@ -150,7 +175,7 @@
     if (!cloud) return;
     await cloud.client.from("research_page_settings").upsert({
       user_id: cloud.user.id,
-      state_summary: String(serverState.summary || "").slice(0, 4000),
+      state_summary: researchSummaryText(serverState.summary || serverState).slice(0, 4000),
       last_sync_at: new Date().toISOString(),
       last_record_title: String(records[0]?.name || "").slice(0, 240) || null,
       server_label: String(serverState.root_name || "自宅研究PC").slice(0, 120),
@@ -184,18 +209,39 @@
   }
 
   function renderRecords(records) {
-    if (!records.length) {
+    state.latestRecords = Array.isArray(records) ? records : [];
+    if (!state.latestRecords.length) {
       elements.researchRecentRecords.innerHTML = "<p>最近の研究記録はありません。</p>";
       return;
     }
-    elements.researchRecentRecords.innerHTML = records.slice(0, 5).map((record) => `
+    elements.researchRecentRecords.innerHTML = state.latestRecords.slice(0, 5).map((record) => {
+      const summary = shortenResearchText(record.summary, 90);
+      return `
       <div class="research-recent-record">
-        <button type="button" data-research-record-path="${escapeHtml(record.path)}">
-          <strong>${escapeHtml(record.name)}</strong>
-          <small>${escapeHtml(formatDate(record.modified_at))}${record.summary ? ` · ${escapeHtml(record.summary)}` : ""}</small>
+        <button type="button" data-research-record-path="${escapeHtml(record.path || "")}">
+          <strong>${escapeHtml(record.name || "名称未設定")}</strong>
+          <small>${escapeHtml(formatDate(record.modified_at))}${summary ? ` · ${escapeHtml(summary)}` : ""}</small>
         </button>
       </div>
-    `).join("");
+    `;
+    }).join("");
+  }
+
+  function openSummaryDetail(kind) {
+    if (!elements.researchSummaryDetailModal) return;
+    if (kind === "state") {
+      const summary = researchSummaryText(state.latestState?.summary || state.latestState);
+      elements.researchSummaryDetailTitle.textContent = "現在の研究状態";
+      elements.researchSummaryDetailBody.innerHTML = `<p>${escapeHtml(summary || "研究状態の要約はまだありません。")}</p>${state.latestState?.updated_at ? `<small>${escapeHtml(state.latestState.source || "研究サーバー")} · ${escapeHtml(formatDate(state.latestState.updated_at))}</small>` : ""}`;
+    } else {
+      elements.researchSummaryDetailTitle.textContent = "最近の研究記録";
+      const records = state.latestRecords || [];
+      elements.researchSummaryDetailBody.innerHTML = records.length
+        ? records.map((record) => `<div class="research-summary-detail-record"><strong>${escapeHtml(record.name || "名称未設定")}</strong><small>${escapeHtml(formatDate(record.modified_at))}${researchSummaryText(record.summary) ? ` · ${escapeHtml(researchSummaryText(record.summary))}` : ""}</small></div>`).join("")
+        : "<p>最近の研究記録はありません。</p>";
+    }
+    elements.researchSummaryDetailModal.hidden = false;
+    document.body.classList.add("modal-open");
   }
 
   async function refreshResearchServer({ quiet = false } = {}) {
@@ -213,8 +259,9 @@
         api("/api/records?limit=5"),
       ]);
       const records = Array.isArray(recordResult.records) ? recordResult.records : [];
+      state.latestState = serverState || {};
       setServerStatus("online", health.message || `${health.root_name || "研究フォルダー"}に接続しています。`, formatDate(new Date()));
-      elements.researchCurrentState.textContent = serverState.summary || "研究状態の記録はまだありません。";
+      elements.researchCurrentState.textContent = shortenResearchText(serverState.summary || serverState) || "研究状態の要約はまだありません。";
       elements.researchStateSource.textContent = serverState.updated_at
         ? `${serverState.source || "研究サーバー"} · ${formatDate(serverState.updated_at)}`
         : (serverState.source || "");
@@ -235,13 +282,13 @@
 
   function closeModal(element) {
     element.hidden = true;
-    if (![elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal].some((modal) => !modal.hidden)) {
+    if (![elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal, elements.researchSummaryDetailModal].some((modal) => !modal.hidden)) {
       document.body.classList.remove("modal-open");
     }
   }
 
   function closeAllBridgeModals() {
-    [elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal].forEach(closeModal);
+    [elements.researchServerSettingsModal, elements.researchFilesModal, elements.researchPacketModal, elements.researchSummaryDetailModal].forEach(closeModal);
   }
 
   function openSettings() {
@@ -473,7 +520,7 @@
       "researchCurrentState", "researchStateSource", "researchRecentRecords", "researchFilesButton",
       "researchPacketButton", "researchSolButton", "researchServerRefreshButton", "researchServerSettingsButton",
       "researchSolResponse", "researchSaveDraftButton", "researchAdoptButton", "researchAdoptionStatus",
-      "researchServerSettingsModal", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
+      "researchServerSettingsModal", "researchSummaryDetailModal", "researchSummaryDetailTitle", "researchSummaryDetailBody", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
       "researchProjectUrl", "researchFilesModal", "researchFilesPath", "researchFilesUpButton",
       "researchFilesReloadButton", "researchFilesList", "researchFilePreview", "researchFileSelectionCount",
       "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSources",
@@ -485,6 +532,18 @@
   function boot() {
     bindElements();
     if (!elements.researchServerStatus) return;
+    document.querySelectorAll("[data-research-summary-detail]").forEach((card) => {
+      card.addEventListener("click", (event) => {
+        if (event.target.closest("[data-research-record-path]")) return;
+        openSummaryDetail(card.dataset.researchSummaryDetail);
+      });
+      card.addEventListener("keydown", (event) => {
+        if ((event.key === "Enter" || event.key === " ") && !event.target.closest("[data-research-record-path]")) {
+          event.preventDefault();
+          openSummaryDetail(card.dataset.researchSummaryDetail);
+        }
+      });
+    });
     elements.researchSolResponse.value = localStorage.getItem(SOL_DRAFT_KEY) || "";
     if (state.latestPacket?.markdown) elements.researchPacketOutput.value = state.latestPacket.markdown;
 
