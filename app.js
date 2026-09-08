@@ -435,7 +435,7 @@
   }
 
   function toPlanDatabasePayload(plan) {
-    return {
+    const payload = {
       title: plan.title,
       objective: plan.objective || null,
       origin_facts: plan.originFacts || null,
@@ -2234,7 +2234,11 @@
     elements.researchTaskDetailForm.addEventListener("submit", saveResearchTaskDetail);
     elements.closeResearchTaskDetail.addEventListener("click", closeResearchTaskDetail);
     elements.cancelResearchTaskDetail.addEventListener("click", closeResearchTaskDetail);
-    elements.deleteResearchTaskDetail.addEventListener("click", () => deleteTask(state.editingResearchTaskId));
+    elements.deleteResearchTaskDetail.addEventListener("click", async () => {
+      const taskId = state.editingResearchTaskId;
+      await deleteTask(taskId);
+      if (!state.tasks.some((item) => item.id === taskId)) closeResearchTaskDetail();
+    });
     elements.completeResearchTaskDetail.addEventListener("click", completeResearchTaskFromDetail);
     elements.researchTaskDetailModal.addEventListener("click", (event) => {
       if (event.target === elements.researchTaskDetailModal) closeResearchTaskDetail();
