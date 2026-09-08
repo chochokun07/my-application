@@ -11,6 +11,7 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import secrets
 import shlex
 import subprocess
@@ -169,7 +170,107 @@ class ResearchRepository:
             "updated_at": utc_iso(path.stat().st_mtime),
         }
 
-    def choose_packet_files(self, requested: list[str]) -> list[str]:
+    def packet_candidates(self) -> list[dict]:
+        candidates: list[dict] = []
+        for path in self.root.rglob("*"):
+            relative = Path(self.relative(path))
+            if not path.is_file() or not self.is_text(path) or not self.is_visible(relative):
+                continue
+            try:
+                stat = path.stat()
+                if stat.st_size > MAX_PREVIEW_BYTES:
+                    continue
+                preview = path.read_text(encoding="utf-8", errors="replace")[:500]
+            except OSError:
+                continue
+            hint = next((line.strip("# ").strip() for line in preview.splitlines() if line.strip()), "")
+            candidates.append({
+                "path": relative.as_posix(),
+                "name": path.name,
+                "size": stat.st_size,
+                "modified_at": utc_iso(stat.st_mtime),
+                "hint": hint[:180],
+            })
+        candidates.sort(key=lambda item: item["modified_at"], reverse=True)
+        return candidates[:240]
+
+    def run_packet_command(self, prompt: str) -> str:
+        command = self.config["packet_command"]
+        if not command:
+            return ""
+        try:
+            completed = subprocess.run(
+                shlex.split(command, posix=os.name != "nt"),
+                input=prompt,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                timeout=180,
+                check=True,
+                cwd=self.root,
+            )
+            return completed.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    def selection_prompt(self, problem: str, instruction: str, candidates: list[dict], preferred: list[str]) -> str:
+        candidate_lines = "\n".join(json.dumps(item, ensure_ascii=False) for item in candidates)
+        preferred_text = "、".join(preferred[:12]) or "なし"
+        return (
+            "あなたは研究資料の選定担当です。\n"
+            "ユーザーの指示と今回考えたい問題に基づき、Research Packet作成に必要な資料だけを選んでください。\n"
+            "候補一覧に存在するpathだけを使い、最大12件まで選んでください。\n"
+            "出力はJSON配列のみとし、説明文やMarkdownは付けないでください。\n"
+            '出力例: ["knowledge/example.md"]\n\n'
+            f"今回考えたい問題:\n{problem}\n\n"
+            f"資料の取得指示:\n{instruction}\n\n"
+            f"手動選択された候補:\n{preferred_text}\n\n"
+            "候補一覧（path、ファイル名、サイズ、更新日時、冒頭の見出し）:\n"
+            f"{candidate_lines}"
+        )
+
+    @staticmethod
+    def parse_selected_files(output: str, candidates: list[dict]) -> list[str]:
+        allowed = {item["path"] for item in candidates}
+        cleaned = re.sub(r"^\x60{3}(?:json)?\s*|\s*\x60{3}$", "", output.strip(), flags=re.IGNORECASE | re.DOTALL)
+        parsed = None
+        try:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
+            match = re.search(r"\[[\s\S]*\]", cleaned)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    parsed = None
+        if isinstance(parsed, dict):
+            parsed = parsed.get("files") or parsed.get("selected_files")
+        if not isinstance(parsed, list):
+            return []
+        selected: list[str] = []
+        for item in parsed:
+            value = item.get("path") if isinstance(item, dict) else item
+            value = str(value or "").replace("\\", "/").lstrip("/")
+            if value in allowed and value not in selected:
+                selected.append(value)
+        return selected[:12]
+
+    def choose_packet_files(
+        self,
+        requested: list[str],
+        problem: str = "",
+        selection_instruction: str = "",
+    ) -> tuple[list[str], str]:
+        if selection_instruction and self.config["packet_command"]:
+            candidates = self.packet_candidates()
+            selection_output = self.run_packet_command(
+                self.selection_prompt(problem, selection_instruction, candidates, requested)
+            )
+            selected = self.parse_selected_files(selection_output, candidates)
+            if selected:
+                return selected, "luna"
+
         chosen: list[str] = []
         for relative in requested[:12]:
             try:
@@ -179,7 +280,8 @@ class ResearchRepository:
             except (FileNotFoundError, ValueError):
                 continue
         if chosen:
-            return list(dict.fromkeys(chosen))
+            return list(dict.fromkeys(chosen)), "manual"
+
         state_path = self.config["state_file"]
         goal_path = self.config["goal_file"]
         for relative in [goal_path, state_path]:
@@ -189,7 +291,7 @@ class ResearchRepository:
             except FileNotFoundError:
                 pass
         chosen.extend(record["path"] for record in self.recent_records(4))
-        return list(dict.fromkeys(chosen))[:8]
+        return list(dict.fromkeys(chosen))[:8], "automatic"
 
     def packet_prompt(self, problem: str, files: list[str]) -> str:
         extracts = []
@@ -243,35 +345,30 @@ class ResearchRepository:
             "## 参照した研究ファイル\n" + "\n".join(f"- {path}" for path in files),
         ])
 
-    def create_packet(self, problem: str, requested: list[str]) -> dict:
-        files = self.choose_packet_files(requested)
+    def create_packet(
+        self,
+        problem: str,
+        requested: list[str],
+        selection_instruction: str = "",
+    ) -> dict:
+        files, selection_method = self.choose_packet_files(
+            requested,
+            problem=problem,
+            selection_instruction=selection_instruction,
+        )
         prompt = self.packet_prompt(problem, files)
-        command = self.config["packet_command"]
-        markdown = ""
+        markdown = self.run_packet_command(prompt)
         generated_by = "local-server extraction"
-        if command:
-            try:
-                completed = subprocess.run(
-                    shlex.split(command, posix=os.name != "nt"),
-                    input=prompt,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    capture_output=True,
-                    timeout=180,
-                    check=True,
-                    cwd=self.root,
-                )
-                markdown = completed.stdout.strip()
-                generated_by = "Work / Luna"
-            except (OSError, subprocess.SubprocessError):
-                markdown = ""
+        if markdown:
+            generated_by = "Work / Luna"
         if not markdown:
             markdown = self.fallback_packet(problem, files)
         return {
             "id": str(uuid.uuid4()),
             "markdown": markdown,
             "sources": files,
+            "selection_method": selection_method,
+            "selection_instruction": selection_instruction,
             "generated_by": generated_by,
             "created_at": utc_iso(),
         }
@@ -432,10 +529,23 @@ class ResearchHandler(BaseHTTPRequestHandler):
             payload = self.read_json()
             if parsed.path == "/api/packets":
                 problem = str(payload.get("problem", "")).strip()
+                instruction = str(payload.get("selection_instruction", "")).strip()
                 selected = payload.get("selected_files") or []
-                if not problem or len(problem) > 4000 or not isinstance(selected, list):
-                    raise ValueError("今回考えたい問題、または参照資料が不正です。")
-                self.send_json(HTTPStatus.CREATED, self.repository.create_packet(problem, [str(item) for item in selected]))
+                if (
+                    not problem
+                    or len(problem) > 4000
+                    or len(instruction) > 4000
+                    or not isinstance(selected, list)
+                ):
+                    raise ValueError("今回考えたい問題、資料の取得指示、または参照資料が不正です。")
+                self.send_json(
+                    HTTPStatus.CREATED,
+                    self.repository.create_packet(
+                        problem,
+                        [str(item) for item in selected],
+                        selection_instruction=instruction,
+                    ),
+                )
             elif parsed.path == "/api/adoptions":
                 packet_id = str(payload.get("packet_id", "")).strip()
                 problem = str(payload.get("problem", "")).strip()
