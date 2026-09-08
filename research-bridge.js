@@ -562,7 +562,7 @@
       "researchCurrentState", "researchStateSource", "researchRecentRecords", "researchFilesButton",
       "researchPacketButton", "researchSolButton", "researchServerRefreshButton", "researchServerSettingsButton",
       "researchSolResponse", "researchSaveDraftButton", "researchAdoptButton", "researchAdoptionStatus",
-      "researchServerSettingsModal", "researchSolUnavailableModal", "researchSummaryDetailModal", "researchSummaryDetailTitle", "researchSummaryDetailBody", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
+      "researchServerSettingsModal", "researchSolUnavailableModal", "researchSolCreatePacketButton", "researchSummaryDetailModal", "researchSummaryDetailTitle", "researchSummaryDetailBody", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
       "researchProjectUrl", "researchFilesModal", "researchFilesPath", "researchFilesUpButton",
       "researchFilesReloadButton", "researchFilesList", "researchFilePreview", "researchFileSelectionCount",
       "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSelectionInstruction", "researchSolInstruction", "researchPacketSources",
