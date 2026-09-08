@@ -176,7 +176,7 @@
           <span id="researchDataNoticeText"></span>
         </div>
 
-        <div class="research-layout">
+        <div class="research-layout research-stack">
           <section class="research-panel" aria-labelledby="researchScheduleTitle">
             <div class="research-panel-heading">
               <div>
@@ -728,6 +728,34 @@
             <button class="primary-button" type="submit">保存</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div id="researchPlanDetailModal" class="modal-backdrop research-plan-detail-backdrop" hidden>
+      <section class="research-plan-detail-modal" role="dialog" aria-modal="true" aria-labelledby="researchPlanDetailTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">RESEARCH PLAN</p>
+            <h2 id="researchPlanDetailTitle">研究プラン詳細</h2>
+          </div>
+          <button id="closeResearchPlanDetail" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="researchPlanDetailBody" class="research-plan-detail-body"></div>
+        <section class="research-plan-detail-tasks">
+          <div class="research-panel-heading">
+            <div>
+              <p class="section-kicker">PROGRESS TASKS</p>
+              <h3>進捗タスク</h3>
+            </div>
+            <button id="addResearchPlanDetailTask" class="small-action-button" type="button">＋ タスク追加</button>
+          </div>
+          <div id="researchPlanDetailTaskList" class="research-plan-detail-task-list"></div>
+        </section>
+        <div class="modal-actions">
+          <button id="editResearchPlanFromDetail" class="secondary-button" type="button">プランを編集</button>
+          <span class="action-spacer"></span>
+          <button id="closeResearchPlanDetailButton" class="primary-button" type="button">閉じる</button>
+        </div>
       </section>
     </div>
 
