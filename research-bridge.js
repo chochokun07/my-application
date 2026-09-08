@@ -454,23 +454,41 @@
     await navigator.clipboard.writeText(value);
   }
 
+  function buildSolPrompt(markdown) {
+    return [
+      "あなたはSolです。以下のResearch Packetを根拠に、研究上の問題を探索的に検討してください。",
+      "",
+      "あなたの役割は、Packetの再要約ではありません。",
+      "研究目的に対して重要な論点、仮説、別の解釈、未知の関係、新しい研究方向を検討してください。",
+      "既存の実験事実・現在の解釈・あなたの推論や提案を明確に分けてください。",
+      "次に行うべき実験を挙げる場合も、確定事項ではなく検討候補として示してください。",
+      "原因切り分けや再現性確認だけに議論を狭めず、研究全体を前進させる方向を優先してください。",
+      "",
+      "## Research Packet（Lunaによる資料整理）",
+      markdown,
+      "",
+      "## Solへの依頼",
+      "上記を踏まえ、研究の方向性を広げる形で考察してください。"
+    ].join("\n");
+  }
+
   async function openSol() {
     const markdown = state.latestPacket?.markdown || elements.researchPacketOutput.value;
     if (!markdown) {
       openPacketModal();
       return;
     }
+    const solPrompt = buildSolPrompt(markdown);
     const target = state.settings.projectUrl || "https://chatgpt.com/";
     const solWindow = window.open(target, "_blank");
     if (solWindow) solWindow.opener = null;
     try {
-      await copyText(markdown);
+      await copyText(solPrompt);
     } catch (_) {
       elements.researchPacketOutput?.select?.();
     }
-    setAdoptionStatus("Research Packetをコピーし、Solの画面を開きました。");
+    setAdoptionStatus("Sol用の分析指示とResearch Packetをコピーし、Solの画面を開きました。");
   }
-
   function saveSolDraft() {
     const response = elements.researchSolResponse.value.trim();
     localStorage.setItem(SOL_DRAFT_KEY, response);
