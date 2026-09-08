@@ -1237,7 +1237,7 @@
     const hypothesis = plan.hypothesis || "仮説はまだ記録されていません。";
     const hypothesisBasis = plan.hypothesisBasis || "仮説の根拠はまだ記録されていません。";
     const taskList = openTasks.length
-      ? openTasks.map((task) => `${
+      ? openTasks.map((task) => `
           <button class="research-plan-task" type="button" data-research-action="open-task" data-task-id="${escapeHtml(task.id)}">
             <span class="research-plan-task-status" aria-hidden="true"></span>
             <span class="research-plan-task-title">${escapeHtml(task.title)}</span>
