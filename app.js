@@ -2,6 +2,8 @@
   "use strict";
 
   const STORAGE_KEY = "my-application.tasks.v0.1";
+  const APP_SETTINGS_STORAGE_KEY = "my-application.app-settings.v0.1";
+  const REMOTE_SETTINGS_KEY = "my_application_settings";
   const RESEARCH_PLANS_STORAGE_KEY = "my-application.research-plans.v0.1";
   const RESEARCH_SCHEDULES_STORAGE_KEY = "my-application.research-schedules.v0.1";
   const LOCAL_MODE_KEY = "my-application.local-mode";
@@ -14,7 +16,25 @@
   const SCHEDULE_SELECT_FIELDS = "id, title, scheduled_at, kind, plan_id, notes, created_at, updated_at";
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
-  const PAGE_VIEWS = new Set(["home", "todo", "research", "creation", "hobby"]);
+  const CORE_PAGE_VIEWS = new Set(["home", "todo"]);
+  const BUILTIN_ACTIVITY_IDS = new Set(["hobby", "research", "creation"]);
+  const DEFAULT_APP_SETTINGS = Object.freeze({
+    appName: "My application",
+    brandOverline: "PERSONAL PLATFORM",
+    sidebarHeading: "自分の活動を\nここに集める",
+    homeTitle: "今日やること",
+    homeEmptySubtitle: "今取り組むタスクはありません。",
+    taskAddLabel: "タスク追加",
+    taskSearchPlaceholder: "タスクを検索",
+    homeNavLabel: "ホーム",
+    todoNavLabel: "To Do",
+    activities: [
+      { id: "hobby", label: "趣味", description: "動画ごとの構想と台本を、同じプロジェクトで管理します。", icon: "✦" },
+      { id: "research", label: "研究", description: "予定・プラン・タスクを、研究の流れに沿ってまとめます。", icon: "⌁" },
+      { id: "creation", label: "創作", description: "創作の内容をここで整理します。", icon: "✎" },
+    ],
+  });
+  let activeAppSettings = readAppSettings();
   const supabaseClient = hasRemoteConfig && window.supabase?.createClient
     ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
       auth: {
@@ -33,6 +53,8 @@
     plans: [],
     schedules: [],
     view: "today",
+    appSettings: activeAppSettings,
+    settingsDraft: null,
     sidebarView: getPageViewFromLocation(),
     search: "",
     authMode: "login",
@@ -74,13 +96,20 @@
     sidebarNav: $("sidebarNav"),
     sidebarSyncStatus: $("sidebarSyncStatus"),
     sidebarTodoCount: $("sidebarTodoCount"),
+    activityNavList: $("activityNavList"),
+    appSettingsButton: $("appSettingsButton"),
+    customActivityPages: $("customActivityPages"),
     accountButton: $("accountButton"),
     accountInitial: $("accountInitial"),
     accountMenu: $("accountMenu"),
     accountEmail: $("accountEmail"),
     signOutButton: $("signOutButton"),
     dateLabel: $("dateLabel"),
+    homePageTitle: $("homePageTitle"),
     todaySubtitle: $("todaySubtitle"),
+    taskAddButtonLabel: $("taskAddButtonLabel"),
+    homeNavLabel: $("homeNavLabel"),
+    todoNavLabel: $("todoNavLabel"),
     taskList: $("taskList"),
     emptyState: $("emptyState"),
     emptyTitle: $("emptyTitle"),
@@ -120,6 +149,12 @@
     todayTabCount: $("todayTabCount"),
     allTabCount: $("allTabCount"),
     completedTabCount: $("completedTabCount"),
+    researchPageTitle: $("researchPageTitle"),
+    researchPageSubtitle: $("researchPageSubtitle"),
+    hobbyPageTitle: $("hobbyPageTitle"),
+    hobbyPageSubtitle: $("hobbyPageSubtitle"),
+    creationPageTitle: $("creationPageTitle"),
+    creationPageSubtitle: $("creationPageSubtitle"),
     addResearchPlanButton: $("addResearchPlanButton"),
     addResearchPlanInlineButton: $("addResearchPlanInlineButton"),
     addResearchScheduleButton: $("addResearchScheduleButton"),
@@ -150,6 +185,20 @@
     closeResearchScheduleModal: $("closeResearchScheduleModal"),
     cancelResearchScheduleButton: $("cancelResearchScheduleButton"),
     deleteResearchScheduleButton: $("deleteResearchScheduleButton"),
+    appSettingsMenu: $("appSettingsMenu"),
+    appSettingsForm: $("appSettingsForm"),
+    settingsAppName: $("settingsAppName"),
+    settingsBrandOverline: $("settingsBrandOverline"),
+    settingsSidebarHeading: $("settingsSidebarHeading"),
+    settingsHomeTitle: $("settingsHomeTitle"),
+    settingsTaskAddLabel: $("settingsTaskAddLabel"),
+    settingsTaskSearchPlaceholder: $("settingsTaskSearchPlaceholder"),
+    settingsHomeNavLabel: $("settingsHomeNavLabel"),
+    settingsTodoNavLabel: $("settingsTodoNavLabel"),
+    settingsActivityList: $("settingsActivityList"),
+    newActivityName: $("newActivityName"),
+    addActivityButton: $("addActivityButton"),
+    resetAppSettingsButton: $("resetAppSettingsButton"),
   };
 
   const STATUS_LABELS = {
@@ -184,9 +233,18 @@
   const dateFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
   const dateTimeFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+  function getSettingsSource() {
+    return activeAppSettings || DEFAULT_APP_SETTINGS;
+  }
+
+  function isKnownPageView(view) {
+    if (CORE_PAGE_VIEWS.has(view)) return true;
+    return getSettingsSource().activities.some((activity) => activity.id === view);
+  }
+
   function getPageViewFromLocation() {
     const hash = window.location.hash.replace(/^#/, "").trim().toLowerCase();
-    return PAGE_VIEWS.has(hash) ? hash : "home";
+    return isKnownPageView(hash) ? hash : "home";
   }
 
   function createId() {
@@ -348,6 +406,332 @@
   }
 
 
+  function cloneDefaultAppSettings() {
+    return {
+      ...DEFAULT_APP_SETTINGS,
+      activities: DEFAULT_APP_SETTINGS.activities.map((activity) => ({ ...activity })),
+    };
+  }
+
+  function normalizeAppSettings(value = {}) {
+    const source = value && typeof value === "object" ? value : {};
+    const defaults = cloneDefaultAppSettings();
+    const defaultActivities = new Map(defaults.activities.map((activity) => [activity.id, activity]));
+    const textSetting = (key, maxLength) => {
+      const candidate = String(source[key] ?? defaults[key]).trim();
+      return (candidate || defaults[key]).slice(0, maxLength);
+    };
+    const rawActivities = Array.isArray(source.activities) ? source.activities : defaults.activities;
+    const seen = new Set();
+    const activities = rawActivities.map((activity) => {
+      const id = String(activity?.id ?? "").trim();
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$/.test(id) || seen.has(id) || CORE_PAGE_VIEWS.has(id)) return null;
+      const fallback = defaultActivities.get(id);
+      const label = String(activity?.label ?? activity?.name ?? fallback?.label ?? "").trim().slice(0, 40);
+      if (!label) return null;
+      const description = String(activity?.description ?? fallback?.description ?? "").trim().slice(0, 140);
+      const icon = String(activity?.icon ?? fallback?.icon ?? "◇").trim().slice(0, 3) || "◇";
+      seen.add(id);
+      return {
+        id,
+        label,
+        description,
+        icon,
+        builtin: BUILTIN_ACTIVITY_IDS.has(id),
+      };
+    }).filter(Boolean);
+    return {
+      appName: textSetting("appName", 60),
+      brandOverline: textSetting("brandOverline", 60),
+      sidebarHeading: textSetting("sidebarHeading", 100),
+      homeTitle: textSetting("homeTitle", 60),
+      homeEmptySubtitle: textSetting("homeEmptySubtitle", 120),
+      taskAddLabel: textSetting("taskAddLabel", 40),
+      taskSearchPlaceholder: textSetting("taskSearchPlaceholder", 60),
+      homeNavLabel: textSetting("homeNavLabel", 30),
+      todoNavLabel: textSetting("todoNavLabel", 30),
+      activities,
+    };
+  }
+
+  function readAppSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(APP_SETTINGS_STORAGE_KEY) || "null");
+      return normalizeAppSettings(saved || {});
+    } catch (error) {
+      console.warn("アプリ設定の読み込みに失敗しました", error);
+      return cloneDefaultAppSettings();
+    }
+  }
+
+  function writeLocalAppSettings() {
+    try {
+      localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(state.appSettings));
+    } catch (error) {
+      console.warn("アプリ設定の保存に失敗しました", error);
+    }
+  }
+
+  function getActivityById(activityId) {
+    return (state.appSettings?.activities || []).find((activity) => activity.id === activityId) || null;
+  }
+
+  function applyAppSettings() {
+    const settings = state.appSettings || getSettingsSource();
+    document.title = settings.appName;
+    document.querySelectorAll(".brand-title").forEach((element) => {
+      element.textContent = settings.appName;
+    });
+    document.querySelectorAll(".brand-overline").forEach((element) => {
+      element.textContent = settings.brandOverline;
+    });
+    document.querySelectorAll("[data-brand-home]").forEach((element) => {
+      element.setAttribute("aria-label", settings.appName + " " + settings.homeNavLabel);
+    });
+    const sidebarHeading = document.querySelector(".sidebar-heading");
+    if (sidebarHeading) sidebarHeading.textContent = settings.sidebarHeading;
+    if (elements.homePageTitle) elements.homePageTitle.textContent = settings.homeTitle;
+    if (elements.taskAddButtonLabel) elements.taskAddButtonLabel.textContent = settings.taskAddLabel;
+    if (elements.searchInput) elements.searchInput.placeholder = settings.taskSearchPlaceholder;
+    if (elements.homeNavLabel) elements.homeNavLabel.textContent = settings.homeNavLabel;
+    if (elements.todoNavLabel) elements.todoNavLabel.textContent = settings.todoNavLabel;
+
+    const updateActivityPage = (activityId, titleElement, subtitleElement) => {
+      const activity = getActivityById(activityId);
+      if (titleElement) titleElement.textContent = activity?.label || "";
+      if (subtitleElement) {
+        subtitleElement.textContent = activity?.description || "";
+        subtitleElement.hidden = !activity?.description;
+      }
+    };
+    updateActivityPage("research", elements.researchPageTitle, elements.researchPageSubtitle);
+    updateActivityPage("hobby", elements.hobbyPageTitle, elements.hobbyPageSubtitle);
+    updateActivityPage("creation", elements.creationPageTitle, elements.creationPageSubtitle);
+  }
+
+  function renderActivityNavigation() {
+    if (!elements.activityNavList) return;
+    elements.activityNavList.innerHTML = (state.appSettings?.activities || []).map((activity) => `
+      <button class="sidebar-nav-item" type="button" data-sidebar-view="${escapeHtml(activity.id)}">
+        <span class="sidebar-nav-icon" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+        <span class="sidebar-nav-label">${escapeHtml(activity.label)}</span>
+      </button>
+    `).join("");
+  }
+
+  function renderCustomActivityPages() {
+    if (!elements.customActivityPages) return;
+    elements.customActivityPages.innerHTML = (state.appSettings?.activities || [])
+      .filter((activity) => !BUILTIN_ACTIVITY_IDS.has(activity.id))
+      .map((activity) => {
+        const titleId = "customActivityTitle-" + activity.id;
+        return `
+          <section id="customActivityPage-${escapeHtml(activity.id)}" class="page-view blank-page custom-activity-page" data-page-view="${escapeHtml(activity.id)}" hidden aria-labelledby="${escapeHtml(titleId)}">
+            <div class="page-heading">
+              <div>
+                <p class="section-kicker">ACTIVITY</p>
+                <h1 id="${escapeHtml(titleId)}">${escapeHtml(activity.label)}</h1>
+                <p class="page-subtitle">${escapeHtml(activity.description || "この活動の内容をここで整理します。")}</p>
+              </div>
+            </div>
+            <div class="blank-page-panel" aria-label="${escapeHtml(activity.label)}の内容">
+              <div class="blank-page-mark" aria-hidden="true">${escapeHtml(activity.icon)}</div>
+            </div>
+          </section>
+        `;
+      }).join("");
+  }
+
+  function renderSettingsActivityList(settings = state.settingsDraft || state.appSettings || cloneDefaultAppSettings()) {
+    if (!elements.settingsActivityList) return;
+    const activities = settings.activities || [];
+    if (!activities.length) {
+      elements.settingsActivityList.innerHTML = '<p class="settings-empty">活動項目はありません。</p>';
+      return;
+    }
+    elements.settingsActivityList.innerHTML = activities.map((activity) => `
+      <div class="settings-activity-row" data-activity-id="${escapeHtml(activity.id)}">
+        <span class="settings-activity-icon" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+        <div class="settings-activity-fields">
+          <label>
+            活動名
+            <input data-settings-activity-title type="text" maxlength="40" value="${escapeHtml(activity.label)}" required />
+          </label>
+          <label>
+            説明
+            <input data-settings-activity-description type="text" maxlength="140" value="${escapeHtml(activity.description)}" />
+          </label>
+        </div>
+        <div class="settings-activity-actions">
+          <span class="settings-activity-badge">${activity.builtin ? "標準" : "追加"}</span>
+          <button class="hobby-danger-button" type="button" data-settings-action="delete-activity" aria-label="${escapeHtml(activity.label)}を削除">削除</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function fillAppSettingsForm(settings = state.settingsDraft || state.appSettings) {
+    const source = settings || cloneDefaultAppSettings();
+    elements.settingsAppName.value = source.appName;
+    elements.settingsBrandOverline.value = source.brandOverline;
+    elements.settingsSidebarHeading.value = source.sidebarHeading;
+    elements.settingsHomeTitle.value = source.homeTitle;
+    elements.settingsTaskAddLabel.value = source.taskAddLabel;
+    elements.settingsTaskSearchPlaceholder.value = source.taskSearchPlaceholder;
+    elements.settingsHomeNavLabel.value = source.homeNavLabel;
+    elements.settingsTodoNavLabel.value = source.todoNavLabel;
+    renderSettingsActivityList(source);
+  }
+
+  function getAppSettingsFormValue() {
+    const source = state.settingsDraft || state.appSettings;
+    const activities = (source.activities || []).map((activity) => {
+      const row = [...elements.settingsActivityList.querySelectorAll("[data-activity-id]")]
+        .find((candidate) => candidate.dataset.activityId === activity.id);
+      return {
+        ...activity,
+        label: row?.querySelector("[data-settings-activity-title]")?.value.trim() || activity.label,
+        description: row?.querySelector("[data-settings-activity-description]")?.value.trim() ?? activity.description,
+      };
+    });
+    return normalizeAppSettings({
+      ...source,
+      appName: elements.settingsAppName.value,
+      brandOverline: elements.settingsBrandOverline.value,
+      sidebarHeading: elements.settingsSidebarHeading.value,
+      homeTitle: elements.settingsHomeTitle.value,
+      taskAddLabel: elements.settingsTaskAddLabel.value,
+      taskSearchPlaceholder: elements.settingsTaskSearchPlaceholder.value,
+      homeNavLabel: elements.settingsHomeNavLabel.value,
+      todoNavLabel: elements.settingsTodoNavLabel.value,
+      activities,
+    });
+  }
+
+  function openAppSettings() {
+    elements.accountMenu.hidden = true;
+    state.settingsDraft = normalizeAppSettings(state.appSettings);
+    fillAppSettingsForm(state.settingsDraft);
+    elements.appSettingsMenu.hidden = false;
+    document.body.classList.add("modal-open");
+    window.setTimeout(() => elements.settingsAppName.focus(), 40);
+  }
+
+  function closeAppSettings() {
+    if (!elements.appSettingsMenu) return;
+    elements.appSettingsMenu.hidden = true;
+    state.settingsDraft = null;
+    if (
+      elements.taskModal.hidden &&
+      elements.researchPlanModal.hidden &&
+      elements.researchScheduleModal.hidden
+    ) {
+      document.body.classList.remove("modal-open");
+    }
+  }
+
+  async function persistAppSettings(nextSettings) {
+    const normalized = normalizeAppSettings(nextSettings);
+    state.appSettings = normalized;
+    activeAppSettings = normalized;
+    writeLocalAppSettings();
+    if (!isKnownPageView(state.sidebarView)) {
+      state.sidebarView = "home";
+      updatePageLocation("home", true);
+    }
+    applyAppSettings();
+    render();
+
+    if (state.mode === "remote" && state.user && supabaseClient) {
+      const metadata = {
+        ...(state.user.user_metadata || {}),
+        [REMOTE_SETTINGS_KEY]: normalized,
+      };
+      const result = await supabaseClient.auth.updateUser({ data: metadata });
+      if (result.error) throw result.error;
+      if (result.data?.user) state.user = result.data.user;
+    }
+  }
+
+  async function saveAppSettings(event) {
+    event.preventDefault();
+    if (!elements.appSettingsForm.reportValidity()) return;
+    const saveButton = elements.appSettingsForm.querySelector('button[type="submit"]');
+    saveButton.disabled = true;
+    try {
+      await persistAppSettings(getAppSettingsFormValue());
+      state.settingsDraft = null;
+      closeAppSettings();
+      showToast("設定を保存しました");
+    } catch (error) {
+      showToast("端末には保存しましたが、同期保存に失敗しました。", true);
+    } finally {
+      saveButton.disabled = false;
+    }
+  }
+
+  async function resetAppSettings() {
+    if (!window.confirm("表示設定と活動項目を初期状態に戻しますか？")) return;
+    const nextSettings = cloneDefaultAppSettings();
+    state.settingsDraft = nextSettings;
+    try {
+      await persistAppSettings(nextSettings);
+      state.settingsDraft = normalizeAppSettings(nextSettings);
+      fillAppSettingsForm(state.settingsDraft);
+      showToast("初期設定に戻しました");
+    } catch (error) {
+      fillAppSettingsForm(state.settingsDraft);
+      showToast("端末には保存しましたが、同期保存に失敗しました。", true);
+    }
+  }
+
+  function addCustomActivity() {
+    const name = elements.newActivityName.value.trim();
+    if (!name) {
+      showToast("追加する活動名を入力してください。", true);
+      elements.newActivityName.focus();
+      return;
+    }
+    const draft = state.settingsDraft || normalizeAppSettings(state.appSettings);
+    draft.activities.push({
+      id: "activity-" + createId(),
+      label: name,
+      description: "この活動の内容をここで整理します。",
+      icon: "◇",
+      builtin: false,
+    });
+    state.settingsDraft = normalizeAppSettings(draft);
+    elements.newActivityName.value = "";
+    renderSettingsActivityList(state.settingsDraft);
+    elements.newActivityName.focus();
+  }
+
+  function handleAppSettingsClick(event) {
+    const target = event.target.closest("[data-settings-action]");
+    if (!target) return;
+    const action = target.dataset.settingsAction;
+    if (action === "close") {
+      closeAppSettings();
+      return;
+    }
+    if (action === "delete-activity") {
+      const row = target.closest("[data-activity-id]");
+      const activityId = row?.dataset.activityId;
+      const activity = state.settingsDraft?.activities.find((item) => item.id === activityId);
+      if (!activity || !window.confirm("「" + activity.label + "」を活動項目から削除しますか？")) return;
+      state.settingsDraft.activities = state.settingsDraft.activities.filter((item) => item.id !== activityId);
+      renderSettingsActivityList(state.settingsDraft);
+    }
+  }
+
+  function loadUserAppSettings(user) {
+    const remoteSettings = user?.user_metadata?.[REMOTE_SETTINGS_KEY];
+    const nextSettings = remoteSettings ? normalizeAppSettings(remoteSettings) : readAppSettings();
+    state.appSettings = nextSettings;
+    activeAppSettings = nextSettings;
+    writeLocalAppSettings();
+  }
+
   function setSidebarOpen(isOpen) {
     const wasOpen = document.body.classList.contains("sidebar-open");
     document.body.classList.toggle("sidebar-open", isOpen);
@@ -384,7 +768,7 @@
   }
 
   function navigateToPage(view) {
-    const nextPage = PAGE_VIEWS.has(view) ? view : "home";
+    const nextPage = isKnownPageView(view) ? view : "home";
     if (nextPage !== state.sidebarView) updatePageLocation(nextPage);
     state.sidebarView = nextPage;
     resetPageFilters();
@@ -671,6 +1055,14 @@
   }
 
   function render() {
+    if (!isKnownPageView(state.sidebarView)) {
+      state.sidebarView = "home";
+      updatePageLocation("home", true);
+    }
+    applyAppSettings();
+    renderActivityNavigation();
+    renderCustomActivityPages();
+
     const openTasks = state.tasks.filter((task) => task.status !== "completed");
     const progressTasks = state.tasks.filter((task) => task.status === "in_progress");
     const completedToday = state.tasks.filter((task) => task.completedAt && task.completedAt.slice(0, 10) === todayKey());
@@ -684,13 +1076,18 @@
     elements.completedTabCount.textContent = String(state.tasks.filter((task) => task.status === "completed").length);
     elements.sidebarTodoCount.textContent = String(openTasks.length);
     elements.dateLabel.textContent = new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date()).toUpperCase();
-    elements.todaySubtitle.textContent = openTasks.length ? `${openTasks.length}件の未完了タスクがあります。` : "今取り組むタスクはありません。";
+    elements.todaySubtitle.textContent = openTasks.length
+      ? `${openTasks.length}件の未完了タスクがあります。`
+      : state.appSettings.homeEmptySubtitle;
 
     const isTodoPage = state.sidebarView === "home" || state.sidebarView === "todo";
     elements.todoPage.hidden = !isTodoPage;
-    elements.researchPage.hidden = state.sidebarView !== "research";
-    elements.creationPage.hidden = state.sidebarView !== "creation";
-    elements.hobbyPage.hidden = state.sidebarView !== "hobby";
+    elements.researchPage.hidden = state.sidebarView !== "research" || !getActivityById("research");
+    elements.creationPage.hidden = state.sidebarView !== "creation" || !getActivityById("creation");
+    elements.hobbyPage.hidden = state.sidebarView !== "hobby" || !getActivityById("hobby");
+    elements.customActivityPages.querySelectorAll("[data-page-view]").forEach((page) => {
+      page.hidden = page.dataset.pageView !== state.sidebarView;
+    });
     elements.appShell.dataset.page = state.sidebarView;
 
     document.querySelectorAll(".view-tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === state.view));
@@ -788,12 +1185,14 @@
       state.tasks = [];
       state.plans = [];
       state.schedules = [];
+      closeAppSettings();
       setSyncStatus("ログイン待ち", "local");
       showAuth();
       return;
     }
 
     localStorage.removeItem(LOCAL_MODE_KEY);
+    loadUserAppSettings(state.user);
     elements.accountInitial.textContent = (state.user.email || "M").slice(0, 1).toUpperCase();
     elements.accountEmail.textContent = state.user.email || "ログイン中";
     elements.accountButton.hidden = false;
@@ -1220,6 +1619,8 @@
   function enterLocalMode() {
     state.mode = "local";
     state.user = null;
+    state.appSettings = readAppSettings();
+    activeAppSettings = state.appSettings;
     state.tasks = readLocalTasks();
     state.plans = readLocalCollection(RESEARCH_PLANS_STORAGE_KEY, normalizePlan);
     state.schedules = readLocalCollection(RESEARCH_SCHEDULES_STORAGE_KEY, normalizeSchedule);
@@ -1293,6 +1694,11 @@
       if (!item) return;
       navigateToPage(item.dataset.sidebarView);
     });
+    elements.appSettingsButton.addEventListener("click", openAppSettings);
+    elements.appSettingsForm.addEventListener("submit", saveAppSettings);
+    elements.appSettingsMenu.addEventListener("click", handleAppSettingsClick);
+    elements.addActivityButton.addEventListener("click", addCustomActivity);
+    elements.resetAppSettingsButton.addEventListener("click", resetAppSettings);
     window.addEventListener("hashchange", syncPageFromLocation);
     window.addEventListener("popstate", syncPageFromLocation);
     elements.addTaskButton.addEventListener("click", () => openTaskModal());
@@ -1361,7 +1767,8 @@
     document.addEventListener("keydown", (event) => {
       const tag = document.activeElement?.tagName;
       const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
-      if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
+      if (event.key === "Escape" && !elements.appSettingsMenu.hidden) closeAppSettings();
+      else if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
       else if (event.key === "Escape" && !elements.researchPlanModal.hidden) closeResearchPlanModal();
       else if (event.key === "Escape" && !elements.researchScheduleModal.hidden) closeResearchScheduleModal();
       else if (event.key === "Escape" && document.body.classList.contains("sidebar-open")) closeSidebar();
