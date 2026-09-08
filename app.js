@@ -28,6 +28,7 @@
     taskSearchPlaceholder: "タスクを検索",
     homeNavLabel: "ホーム",
     todoNavLabel: "To Do",
+    customTags: [],
     activities: [
       { id: "hobby", label: "趣味", description: "動画ごとの構想と台本を、同じプロジェクトで管理します。", icon: "✦" },
       { id: "research", label: "研究", description: "予定・プラン・タスクを、研究の流れに沿ってまとめます。", icon: "⌁" },
@@ -55,13 +56,13 @@
     view: "today",
     appSettings: activeAppSettings,
     settingsDraft: null,
+    taskTagDraft: [],
     sidebarView: getPageViewFromLocation(),
     search: "",
     authMode: "login",
     editingTaskId: null,
     editingPlanId: null,
     editingScheduleId: null,
-    researchTaskContext: false,
     researchRemoteAvailable: true,
     researchTaskSchemaAvailable: true,
     researchDataError: "",
@@ -86,6 +87,16 @@
     researchPlanEmpty: $("researchPlanEmpty"),
     researchTaskList: $("researchTaskList"),
     researchTaskEmpty: $("researchTaskEmpty"),
+    researchTaskTitle: $("researchTaskTitle"),
+    researchTaskDescription: $("researchTaskDescription"),
+    hobbyTaskList: $("hobbyTaskList"),
+    hobbyTaskEmpty: $("hobbyTaskEmpty"),
+    hobbyTaskTitle: $("hobbyTaskTitle"),
+    hobbyTaskDescription: $("hobbyTaskDescription"),
+    creationTaskList: $("creationTaskList"),
+    creationTaskEmpty: $("creationTaskEmpty"),
+    creationTaskTitle: $("creationTaskTitle"),
+    creationTaskDescription: $("creationTaskDescription"),
     authShell: $("authShell"),
     setupNotice: $("setupNotice"),
     syncStatus: $("syncStatus"),
@@ -134,8 +145,11 @@
     taskReminderAt: $("taskReminderAt"),
     taskReminderEnabled: $("taskReminderEnabled"),
     taskTags: $("taskTags"),
+    taskTagPicker: $("taskTagPicker"),
+    taskSelectedTags: $("taskSelectedTags"),
+    taskTagInput: $("taskTagInput"),
+    taskTagSuggestions: $("taskTagSuggestions"),
     taskResearchPlan: $("taskResearchPlan"),
-    taskIsResearch: $("taskIsResearch"),
     deleteTaskButton: $("deleteTaskButton"),
     closeTaskModal: $("closeTaskModal"),
     cancelTaskButton: $("cancelTaskButton"),
@@ -196,8 +210,11 @@
     settingsHomeNavLabel: $("settingsHomeNavLabel"),
     settingsTodoNavLabel: $("settingsTodoNavLabel"),
     settingsActivityList: $("settingsActivityList"),
+    settingsTagList: $("settingsTagList"),
     newActivityName: $("newActivityName"),
     addActivityButton: $("addActivityButton"),
+    newTagName: $("newTagName"),
+    addTagButton: $("addTagButton"),
     resetAppSettingsButton: $("resetAppSettingsButton"),
   };
 
@@ -264,13 +281,71 @@
     return [...new Set(values.map((tag) => String(tag).trim()).filter(Boolean))];
   }
 
+  function normalizeTagCandidate(value) {
+    return String(value ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 40);
+  }
+
+  function normalizeTagCandidates(value) {
+    const values = Array.isArray(value) ? value : String(value ?? "").split(/[,、，]/);
+    const seen = new Set();
+    return values.map(normalizeTagCandidate).filter((tag) => {
+      const key = tag.toLocaleLowerCase("ja-JP");
+      if (!tag || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function tagKey(value) {
+    return String(value ?? "").trim().toLocaleLowerCase("ja-JP");
+  }
+
+  function hasTag(tags, label) {
+    const target = tagKey(label);
+    return Boolean(target && normalizeTags(tags).some((tag) => tagKey(tag) === target));
+  }
+
+  function getPageTagLabels(settings = state.appSettings || getSettingsSource()) {
+    return (settings?.activities || [])
+      .map((activity) => normalizeTagCandidate(activity.label))
+      .filter(Boolean);
+  }
+
+  function getTagCandidates(settings = state.appSettings || getSettingsSource()) {
+    const candidates = [];
+    const seen = new Set();
+    [...getPageTagLabels(settings), ...normalizeTagCandidates(settings?.customTags)].forEach((tag) => {
+      const key = tagKey(tag);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      candidates.push(tag);
+    });
+    return candidates;
+  }
+
+  function getActivityTagLabel(activityId, settings = state.appSettings || getSettingsSource()) {
+    return normalizeTagCandidate((settings?.activities || []).find((activity) => activity.id === activityId)?.label);
+  }
+
+  function taskBelongsToActivity(task, activityId) {
+    const pageTag = getActivityTagLabel(activityId);
+    if (!pageTag) return false;
+    return hasTag(task.tags, pageTag);
+  }
+
   function normalizeTask(task = {}) {
+    const rawTags = normalizeTags(task.tags);
+    const legacyResearch = Boolean(task.is_research ?? task.isResearch ?? task.research_plan_id ?? task.researchPlanId);
+    const researchPageTag = getActivityTagLabel("research");
+    const tags = legacyResearch && researchPageTag && !hasTag(rawTags, researchPageTag)
+      ? [...rawTags, researchPageTag]
+      : rawTags;
     return {
       id: task.id || createId(),
       title: String(task.title || "").trim(),
       memo: String(task.memo ?? ""),
-      tags: normalizeTags(task.tags),
-      isResearch: Boolean(task.is_research ?? task.isResearch ?? task.research_plan_id ?? task.researchPlanId),
+      tags,
+      isResearch: legacyResearch,
       researchPlanId: task.research_plan_id ?? task.researchPlanId ?? "",
       status: STATUS_LABELS[task.status] ? task.status : "todo",
       dueDate: task.due_date ?? task.dueDate ?? "",
@@ -409,6 +484,7 @@
   function cloneDefaultAppSettings() {
     return {
       ...DEFAULT_APP_SETTINGS,
+      customTags: [...DEFAULT_APP_SETTINGS.customTags],
       activities: DEFAULT_APP_SETTINGS.activities.map((activity) => ({ ...activity })),
     };
   }
@@ -450,6 +526,7 @@
       taskSearchPlaceholder: textSetting("taskSearchPlaceholder", 60),
       homeNavLabel: textSetting("homeNavLabel", 30),
       todoNavLabel: textSetting("todoNavLabel", 30),
+      customTags: normalizeTagCandidates(source.customTags ?? source.tagCandidates),
       activities,
     };
   }
@@ -507,6 +584,19 @@
     updateActivityPage("research", elements.researchPageTitle, elements.researchPageSubtitle);
     updateActivityPage("hobby", elements.hobbyPageTitle, elements.hobbyPageSubtitle);
     updateActivityPage("creation", elements.creationPageTitle, elements.creationPageSubtitle);
+
+    const updateActivityTaskText = (activityId, titleElement, descriptionElement) => {
+      const label = getActivityTagLabel(activityId, settings);
+      if (!label) return;
+      if (titleElement) titleElement.textContent = `${label}タスク`;
+      if (descriptionElement) descriptionElement.textContent = `タグに「${label}」を付けたタスクがここに表示されます。`;
+      document.querySelectorAll(`[data-activity-task-add="${activityId}"]`).forEach((button) => {
+        button.textContent = button.closest(".research-empty") ? `${label}タスクを追加` : `＋ ${label}タスクを追加`;
+      });
+    };
+    updateActivityTaskText("research", elements.researchTaskTitle, elements.researchTaskDescription);
+    updateActivityTaskText("hobby", elements.hobbyTaskTitle, elements.hobbyTaskDescription);
+    updateActivityTaskText("creation", elements.creationTaskTitle, elements.creationTaskDescription);
   }
 
   function renderActivityNavigation() {
@@ -525,6 +615,8 @@
       .filter((activity) => !BUILTIN_ACTIVITY_IDS.has(activity.id))
       .map((activity) => {
         const titleId = "customActivityTitle-" + activity.id;
+        const taskTitleId = "customActivityTaskTitle-" + activity.id;
+        const taskLabel = escapeHtml(activity.label);
         return `
           <section id="customActivityPage-${escapeHtml(activity.id)}" class="page-view blank-page custom-activity-page" data-page-view="${escapeHtml(activity.id)}" hidden aria-labelledby="${escapeHtml(titleId)}">
             <div class="page-heading">
@@ -537,6 +629,22 @@
             <div class="blank-page-panel" aria-label="${escapeHtml(activity.label)}の内容">
               <div class="blank-page-mark" aria-hidden="true">${escapeHtml(activity.icon)}</div>
             </div>
+            <section class="research-panel activity-task-panel" aria-labelledby="${escapeHtml(taskTitleId)}">
+              <div class="research-panel-heading activity-tasks-heading">
+                <div>
+                  <p class="section-kicker">ACTIVITY TASKS</p>
+                  <h2 id="${escapeHtml(taskTitleId)}">${taskLabel}タスク</h2>
+                  <p>タグに「${taskLabel}」を付けたタスクがここに表示されます。</p>
+                </div>
+                <button class="secondary-button" type="button" data-activity-task-add="${escapeHtml(activity.id)}">＋ ${taskLabel}タスクを追加</button>
+              </div>
+              <div class="task-list activity-task-list" data-activity-task-list="${escapeHtml(activity.id)}"></div>
+              <div class="research-empty" data-activity-task-empty="${escapeHtml(activity.id)}" hidden>
+                <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+                <p>${taskLabel}タスクはまだありません。</p>
+                <button class="text-button" type="button" data-activity-task-add="${escapeHtml(activity.id)}">${taskLabel}タスクを追加</button>
+              </div>
+            </section>
           </section>
         `;
       }).join("");
@@ -570,6 +678,26 @@
     `).join("");
   }
 
+  function renderSettingsTagList(settings = state.settingsDraft || state.appSettings || cloneDefaultAppSettings()) {
+    if (!elements.settingsTagList) return;
+    const pageTagKeys = new Set(getPageTagLabels(settings).map(tagKey));
+    const candidates = getTagCandidates(settings);
+    if (!candidates.length) {
+      elements.settingsTagList.innerHTML = '<p class="settings-empty">タグ候補はありません。</p>';
+      return;
+    }
+    elements.settingsTagList.innerHTML = candidates.map((tag) => {
+      const isPageTag = pageTagKeys.has(tagKey(tag));
+      return `
+        <div class="settings-tag-row" data-settings-tag="${escapeHtml(tag)}">
+          <span class="tag-chip">${escapeHtml(tag)}</span>
+          <span class="settings-tag-badge">${isPageTag ? "ページ名" : "任意"}</span>
+          ${isPageTag ? "" : `<button class="hobby-danger-button" type="button" data-settings-action="delete-tag" aria-label="${escapeHtml(tag)}をタグ候補から削除">削除</button>`}
+        </div>
+      `;
+    }).join("");
+  }
+
   function fillAppSettingsForm(settings = state.settingsDraft || state.appSettings) {
     const source = settings || cloneDefaultAppSettings();
     elements.settingsAppName.value = source.appName;
@@ -581,6 +709,7 @@
     elements.settingsHomeNavLabel.value = source.homeNavLabel;
     elements.settingsTodoNavLabel.value = source.todoNavLabel;
     renderSettingsActivityList(source);
+    renderSettingsTagList(source);
   }
 
   function getAppSettingsFormValue() {
@@ -604,6 +733,7 @@
       taskSearchPlaceholder: elements.settingsTaskSearchPlaceholder.value,
       homeNavLabel: elements.settingsHomeNavLabel.value,
       todoNavLabel: elements.settingsTodoNavLabel.value,
+      customTags: source.customTags,
       activities,
     });
   }
@@ -711,7 +841,28 @@
     state.settingsDraft = normalizeAppSettings(draft);
     elements.newActivityName.value = "";
     renderSettingsActivityList(state.settingsDraft);
+    renderSettingsTagList(state.settingsDraft);
     elements.newActivityName.focus();
+  }
+
+  function addCustomTag() {
+    const name = normalizeTagCandidate(elements.newTagName.value);
+    if (!name) {
+      showToast("追加するタグ候補を入力してください。", true);
+      elements.newTagName.focus();
+      return;
+    }
+    const draft = state.settingsDraft || normalizeAppSettings(state.appSettings);
+    if (getTagCandidates(draft).some((tag) => tagKey(tag) === tagKey(name))) {
+      showToast("そのタグはすでに候補にあります。", true);
+      elements.newTagName.focus();
+      return;
+    }
+    draft.customTags = normalizeTagCandidates([...(draft.customTags || []), name]);
+    state.settingsDraft = normalizeAppSettings(draft);
+    elements.newTagName.value = "";
+    renderSettingsTagList(state.settingsDraft);
+    elements.newTagName.focus();
   }
 
   function handleAppSettingsClick(event) {
@@ -729,6 +880,17 @@
       if (!activity || !window.confirm("「" + activity.label + "」を活動項目から削除しますか？")) return;
       state.settingsDraft.activities = state.settingsDraft.activities.filter((item) => item.id !== activityId);
       renderSettingsActivityList(state.settingsDraft);
+      renderSettingsTagList(state.settingsDraft);
+      return;
+    }
+    if (action === "delete-tag") {
+      const row = target.closest("[data-settings-tag]");
+      const tag = row?.dataset.settingsTag;
+      if (!tag || !state.settingsDraft) return;
+      if (!window.confirm("「" + tag + "」をタグ候補から削除しますか？")) return;
+      state.settingsDraft.customTags = normalizeTagCandidates(state.settingsDraft.customTags)
+        .filter((candidate) => tagKey(candidate) !== tagKey(tag));
+      renderSettingsTagList(state.settingsDraft);
     }
   }
 
@@ -882,6 +1044,82 @@
     return element.innerHTML;
   }
 
+  function renderTaskTagPicker() {
+    if (!elements.taskTagPicker) return;
+    const selected = normalizeTags(state.taskTagDraft);
+    const selectedKeys = new Set(selected.map(tagKey));
+    elements.taskTags.value = selected.join(", ");
+    elements.taskSelectedTags.innerHTML = selected.map((tag) => `
+      <span class="tag-picker-chip tag-chip">
+        <span>${escapeHtml(tag)}</span>
+        <button type="button" data-task-tag-remove="${escapeHtml(tag)}" aria-label="${escapeHtml(tag)}を外す">×</button>
+      </span>
+    `).join("");
+
+    const query = tagKey(elements.taskTagInput.value);
+    const suggestions = getTagCandidates().filter((tag) => !selectedKeys.has(tagKey(tag)) && (!query || tagKey(tag).includes(query)));
+    elements.taskTagSuggestions.innerHTML = suggestions.length
+      ? suggestions.map((tag) => `
+          <button class="tag-picker-option" type="button" role="option" data-tag-candidate="${escapeHtml(tag)}">
+            <span class="tag-chip">${escapeHtml(tag)}</span>
+          </button>
+        `).join("")
+      : '<p class="tag-picker-empty">候補がありません。設定から追加できます。</p>';
+    elements.taskTagSuggestions.hidden = document.activeElement !== elements.taskTagInput && !query;
+  }
+
+  function showTaskTagSuggestions() {
+    renderTaskTagPicker();
+    elements.taskTagSuggestions.hidden = false;
+  }
+
+  function hideTaskTagSuggestions() {
+    elements.taskTagSuggestions.hidden = true;
+  }
+
+  function addTaskTag(tag) {
+    const candidate = normalizeTagCandidate(tag);
+    if (!candidate || state.taskTagDraft.some((item) => tagKey(item) === tagKey(candidate))) return;
+    state.taskTagDraft = normalizeTags([...state.taskTagDraft, candidate]);
+    elements.taskTagInput.value = "";
+    renderTaskTagPicker();
+    elements.taskTagInput.focus();
+    elements.taskTagSuggestions.hidden = false;
+  }
+
+  function handleTaskTagPickerClick(event) {
+    const removeButton = event.target.closest("[data-task-tag-remove]");
+    if (removeButton) {
+      const removeKey = tagKey(removeButton.dataset.taskTagRemove);
+      state.taskTagDraft = state.taskTagDraft.filter((tag) => tagKey(tag) !== removeKey);
+      renderTaskTagPicker();
+      return;
+    }
+    const option = event.target.closest("[data-tag-candidate]");
+    if (option) addTaskTag(option.dataset.tagCandidate);
+  }
+
+  function handleTaskTagInputKeydown(event) {
+    if (event.key === "Escape") {
+      hideTaskTagSuggestions();
+      return;
+    }
+    if (event.key === "Backspace" && !elements.taskTagInput.value && state.taskTagDraft.length) {
+      state.taskTagDraft = state.taskTagDraft.slice(0, -1);
+      renderTaskTagPicker();
+      return;
+    }
+    if (event.key !== "Enter" && event.key !== "," && event.key !== "、") return;
+    event.preventDefault();
+    const query = tagKey(elements.taskTagInput.value);
+    const candidate = getTagCandidates().find((tag) => tagKey(tag) === query);
+    if (candidate) {
+      addTaskTag(candidate);
+    } else if (query) {
+      showToast("タグ候補から選択してください。", true);
+    }
+  }
+
   function getVisibleTasks() {
     const search = state.search.trim().toLocaleLowerCase("ja-JP");
     const filtered = state.tasks.filter((task) => {
@@ -913,7 +1151,7 @@
     const reminder = task.reminderEnabled && task.reminderAt
       ? `<span class="task-meta-item">♧ ${escapeHtml(formatDateTime(task.reminderAt))}</span>`
       : "";
-    const researchMark = task.isResearch
+    const researchMark = taskBelongsToActivity(task, "research")
       ? `<span class="task-meta-item research-task-mark">⌁ 研究</span>`
       : "";
     const researchPlanMark = researchPlan
@@ -1005,6 +1243,46 @@
     `;
   }
 
+  function sortActivityTasks(tasks) {
+    return [...tasks].sort((a, b) => {
+      if (a.status === "completed" && b.status !== "completed") return 1;
+      if (b.status === "completed" && a.status !== "completed") return -1;
+      const dueDifference = (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31");
+      if (dueDifference !== 0) return dueDifference;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }
+
+  function getActivityTasks(activityId) {
+    return sortActivityTasks(state.tasks.filter((task) => taskBelongsToActivity(task, activityId)));
+  }
+
+  function renderActivityTaskList(activityId, listElement, emptyElement) {
+    if (!listElement || !emptyElement) return;
+    const activity = getActivityById(activityId);
+    const tasks = activity ? getActivityTasks(activityId) : [];
+    const label = activity?.label || "活動";
+    listElement.innerHTML = tasks.map(renderTask).join("");
+    listElement.hidden = tasks.length === 0;
+    emptyElement.hidden = tasks.length !== 0;
+    const emptyText = emptyElement.querySelector("p");
+    if (emptyText) emptyText.textContent = `${label}タスクはまだありません。`;
+    emptyElement.querySelectorAll("[data-activity-task-add]").forEach((button) => {
+      button.textContent = `${label}タスクを追加`;
+    });
+  }
+
+  function renderActivityTasks() {
+    renderActivityTaskList("research", elements.researchTaskList, elements.researchTaskEmpty);
+    renderActivityTaskList("hobby", elements.hobbyTaskList, elements.hobbyTaskEmpty);
+    renderActivityTaskList("creation", elements.creationTaskList, elements.creationTaskEmpty);
+    document.querySelectorAll("[data-activity-task-list]").forEach((listElement) => {
+      const activityId = listElement.dataset.activityTaskList;
+      const emptyElement = document.querySelector(`[data-activity-task-empty="${activityId}"]`);
+      renderActivityTaskList(activityId, listElement, emptyElement);
+    });
+  }
+
   function renderResearch() {
     const openPlans = state.plans.filter((plan) => plan.status !== "completed");
     const now = Date.now();
@@ -1012,13 +1290,7 @@
       const timestamp = new Date(schedule.scheduledAt).getTime();
       return Number.isFinite(timestamp) && timestamp >= now;
     });
-    const researchTasks = state.tasks
-      .filter((task) => task.isResearch || task.researchPlanId)
-      .sort((a, b) => {
-        if (a.status === "completed" && b.status !== "completed") return 1;
-        if (b.status === "completed" && a.status !== "completed") return -1;
-        return (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31");
-      });
+    const researchTasks = getActivityTasks("research");
     const sortedSchedules = [...state.schedules].sort((a, b) => {
       const timeA = new Date(a.scheduledAt).getTime();
       const timeB = new Date(b.scheduledAt).getTime();
@@ -1045,7 +1317,7 @@
     const noticeMessages = [];
     if (state.mode === "remote" && !state.researchRemoteAvailable) noticeMessages.push(researchSetupMessage());
     if (state.mode === "remote" && !state.researchTaskSchemaAvailable) {
-      noticeMessages.push("既存タスクとの研究連携には、最新のsupabase/schema.sqlの実行が必要です。");
+      noticeMessages.push("研究プランとの紐付けには、最新のsupabase/schema.sqlの実行が必要です。タグによるページ振り分けは利用できます。");
     }
     elements.researchDataNotice.hidden = noticeMessages.length === 0;
     elements.researchDataNoticeText.textContent = noticeMessages.join(" ");
@@ -1058,9 +1330,7 @@
     elements.researchPlanList.hidden = sortedPlans.length === 0;
     elements.researchPlanEmpty.hidden = sortedPlans.length !== 0;
 
-    elements.researchTaskList.innerHTML = researchTasks.map(renderTask).join("");
-    elements.researchTaskList.hidden = researchTasks.length === 0;
-    elements.researchTaskEmpty.hidden = researchTasks.length !== 0;
+    renderActivityTasks();
   }
 
   function render() {
@@ -1181,7 +1451,7 @@
     let result = await execute();
     if (result.error && state.researchTaskSchemaAvailable && isMissingResearchColumn(result.error)) {
       state.researchTaskSchemaAvailable = false;
-      if (task.isResearch || task.researchPlanId) throw new Error(researchSetupMessage());
+      if (task.researchPlanId) throw new Error(researchSetupMessage());
       result = await execute();
     }
     if (result.error) throw result.error;
@@ -1243,6 +1513,7 @@
     const existing = state.tasks.find((task) => task.id === state.editingTaskId);
     const status = elements.taskStatus.value;
     const researchPlanId = elements.taskResearchPlan.value || "";
+    const tags = normalizeTags(state.taskTagDraft);
     const completedAt = status === "completed"
       ? existing?.completedAt || new Date().toISOString()
       : null;
@@ -1250,8 +1521,8 @@
       id: state.editingTaskId || createId(),
       title: elements.taskTitle.value.trim(),
       memo: elements.taskMemo.value.trim(),
-      tags: normalizeTags(elements.taskTags.value),
-      isResearch: elements.taskIsResearch.checked || Boolean(researchPlanId),
+      tags,
+      isResearch: hasTag(tags, getActivityTagLabel("research")) || Boolean(researchPlanId),
       researchPlanId,
       dueDate: elements.taskDueDate.value || "",
       priority: elements.taskPriority.value,
@@ -1579,16 +1850,17 @@
 
   function openTaskModal(task = null, options = {}) {
     state.editingTaskId = task?.id || null;
-    state.researchTaskContext = Boolean(options.researchContext);
     elements.taskModalTitle.textContent = task ? "タスクを編集" : "タスクを追加";
     elements.deleteTaskButton.hidden = !task;
     elements.taskId.value = task?.id || "";
     elements.taskTitle.value = task?.title || "";
     elements.taskMemo.value = task?.memo || "";
-    elements.taskTags.value = task?.tags?.join(", ") || "";
+    const contextTag = !task && options.activityId ? getActivityTagLabel(options.activityId) : "";
+    state.taskTagDraft = normalizeTags(task?.tags || (contextTag ? [contextTag] : []));
+    elements.taskTagInput.value = "";
+    renderTaskTagPicker();
     updateResearchPlanSelectors();
     elements.taskResearchPlan.value = task?.researchPlanId || "";
-    elements.taskIsResearch.checked = task ? Boolean(task.isResearch || task.researchPlanId) : state.researchTaskContext;
     elements.taskDueDate.value = task?.dueDate || "";
     elements.taskPriority.value = task?.priority || "medium";
     elements.taskStatus.value = task?.status || "todo";
@@ -1603,7 +1875,9 @@
     elements.taskModal.hidden = true;
     document.body.classList.remove("modal-open");
     state.editingTaskId = null;
-    state.researchTaskContext = false;
+    state.taskTagDraft = [];
+    elements.taskTagInput.value = "";
+    hideTaskTagSuggestions();
     elements.taskForm.reset();
   }
 
@@ -1681,7 +1955,7 @@
     const emptyAction = event.target.closest("[data-empty-action]")?.dataset.emptyAction;
     if (emptyAction === "plan") return openResearchPlanModal();
     if (emptyAction === "schedule") return openResearchScheduleModal();
-    if (emptyAction === "task") return openTaskModal(null, { researchContext: true });
+    if (emptyAction === "task") return openTaskModal(null, { activityId: "research" });
 
     const target = event.target.closest("[data-research-action]");
     if (!target) return;
@@ -1707,6 +1981,7 @@
     elements.appSettingsForm.addEventListener("submit", saveAppSettings);
     elements.appSettingsMenu.addEventListener("click", handleAppSettingsClick);
     elements.addActivityButton.addEventListener("click", addCustomActivity);
+    elements.addTagButton.addEventListener("click", addCustomTag);
     elements.resetAppSettingsButton.addEventListener("click", resetAppSettings);
     window.addEventListener("hashchange", syncPageFromLocation);
     window.addEventListener("popstate", syncPageFromLocation);
@@ -1716,7 +1991,6 @@
     elements.addResearchPlanInlineButton.addEventListener("click", () => openResearchPlanModal());
     elements.addResearchScheduleButton.addEventListener("click", () => openResearchScheduleModal());
     elements.addResearchScheduleInlineButton.addEventListener("click", () => openResearchScheduleModal());
-    elements.addResearchTaskButton.addEventListener("click", () => openTaskModal(null, { researchContext: true }));
     elements.researchPage.addEventListener("click", handleResearchPageClick);
     elements.authForm.addEventListener("submit", handleAuthSubmit);
     elements.authModeButton.addEventListener("click", () => {
@@ -1728,6 +2002,11 @@
     elements.closeTaskModal.addEventListener("click", closeTaskModal);
     elements.cancelTaskButton.addEventListener("click", closeTaskModal);
     elements.taskForm.addEventListener("submit", saveTask);
+    elements.taskTagPicker.addEventListener("click", handleTaskTagPickerClick);
+    elements.taskTagInput.addEventListener("focus", showTaskTagSuggestions);
+    elements.taskTagInput.addEventListener("input", renderTaskTagPicker);
+    elements.taskTagInput.addEventListener("keydown", handleTaskTagInputKeydown);
+    elements.taskTagInput.addEventListener("blur", () => window.setTimeout(hideTaskTagSuggestions, 120));
     elements.deleteTaskButton.addEventListener("click", () => deleteTask(state.editingTaskId));
     elements.taskModal.addEventListener("click", (event) => {
       if (event.target === elements.taskModal) closeTaskModal();
@@ -1764,10 +2043,15 @@
         render();
       });
     });
-    elements.taskList.addEventListener("click", handleTaskListClick);
-    elements.taskList.addEventListener("keydown", handleTaskListKeydown);
-    elements.researchTaskList.addEventListener("click", handleTaskListClick);
-    elements.researchTaskList.addEventListener("keydown", handleTaskListKeydown);
+    elements.appShell.addEventListener("click", (event) => {
+      const addButton = event.target.closest("[data-activity-task-add]");
+      if (addButton) {
+        openTaskModal(null, { activityId: addButton.dataset.activityTaskAdd });
+        return;
+      }
+      handleTaskListClick(event);
+    });
+    elements.appShell.addEventListener("keydown", handleTaskListKeydown);
     document.addEventListener("click", (event) => {
       if (!elements.accountMenu.hidden && !event.target.closest(".account-menu, .account-button")) {
         elements.accountMenu.hidden = true;

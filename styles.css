@@ -910,6 +910,18 @@ code {
   padding-top: 16px;
 }
 
+.activity-task-panel {
+  margin-top: 18px;
+}
+
+.activity-tasks-heading {
+  align-items: center;
+}
+
+.activity-task-list {
+  padding-top: 16px;
+}
+
 .research-task-mark,
 .research-plan-mark {
   color: var(--orange);
@@ -1358,6 +1370,107 @@ p {
   font-size: 10px;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.tag-picker {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: rgba(255, 253, 248, 0.74);
+}
+
+.tag-picker:focus-within {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(217, 128, 85, 0.12);
+}
+
+.tag-picker-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tag-picker-chip {
+  gap: 5px;
+  padding-right: 4px;
+}
+
+.tag-picker-chip button {
+  display: inline-grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: currentColor;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.tag-picker-chip button:hover {
+  background: rgba(31, 61, 56, 0.12);
+}
+
+.tag-picker input {
+  min-height: 27px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.tag-picker-suggestions {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 190px;
+  padding: 7px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fffdf8;
+  box-shadow: var(--shadow);
+}
+
+.tag-picker-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+}
+
+.tag-picker-option:hover,
+.tag-picker-option:focus-visible {
+  background: var(--green-soft);
+}
+
+.tag-picker-empty {
+  margin: 3px 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.field-help {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .task-meta-item {
@@ -1967,6 +2080,15 @@ select:hover {
   }
 
   .research-tasks-heading .secondary-button {
+    width: 100%;
+  }
+
+  .activity-tasks-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .activity-tasks-heading .secondary-button {
     width: 100%;
   }
 
@@ -3016,6 +3138,34 @@ select:hover {
   font-size: 10px;
 }
 
+.settings-tag-list {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.settings-tag-badge {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.settings-tag-row .hobby-danger-button {
+  padding: 6px 8px;
+  font-size: 10px;
+}
+
 .settings-add-activity {
   display: flex;
   align-items: flex-end;
@@ -3028,6 +3178,23 @@ select:hover {
 }
 
 .settings-add-activity .secondary-button {
+  flex: 0 0 auto;
+  padding: 9px 11px;
+  font-size: 11px;
+}
+
+.settings-add-tag {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.settings-add-tag label {
+  flex: 1;
+}
+
+.settings-add-tag .secondary-button {
   flex: 0 0 auto;
   padding: 9px 11px;
   font-size: 11px;
@@ -3117,6 +3284,15 @@ select:hover {
   }
 
   .settings-add-activity .secondary-button {
+    width: 100%;
+  }
+
+  .settings-add-tag {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-add-tag .secondary-button {
     width: 100%;
   }
 }

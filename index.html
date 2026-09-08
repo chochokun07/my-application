@@ -215,15 +215,15 @@
             <div>
               <p class="section-kicker">RESEARCH TASKS</p>
               <h2 id="researchTaskTitle">研究タスク</h2>
-              <p>ここに表示されるタスクは、メインのTo Doリストと同じデータです。</p>
+              <p id="researchTaskDescription">タグに「研究」を付けたタスクがここに表示されます。</p>
             </div>
-            <button id="addResearchTaskButton" class="secondary-button" type="button">＋ 研究タスクを追加</button>
+            <button id="addResearchTaskButton" class="secondary-button" type="button" data-activity-task-add="research">＋ 研究タスクを追加</button>
           </div>
           <div id="researchTaskList" class="task-list research-task-list"></div>
           <div id="researchTaskEmpty" class="research-empty" hidden>
             <span class="research-empty-mark" aria-hidden="true">✓</span>
             <p>研究タスクはまだありません。</p>
-            <button class="text-button" type="button" data-empty-action="task">研究タスクを追加</button>
+            <button class="text-button" type="button" data-activity-task-add="research">研究タスクを追加</button>
           </div>
         </section>
       </section>
@@ -369,6 +369,22 @@
             </div>
           </section>
         </div>
+        <section class="research-panel activity-task-panel" aria-labelledby="hobbyTaskTitle">
+          <div class="research-panel-heading activity-tasks-heading">
+            <div>
+              <p class="section-kicker">HOBBY TASKS</p>
+              <h2 id="hobbyTaskTitle">趣味タスク</h2>
+              <p id="hobbyTaskDescription">タグに「趣味」を付けたタスクがここに表示されます。</p>
+            </div>
+            <button id="addHobbyTaskButton" class="secondary-button" type="button" data-activity-task-add="hobby">＋ 趣味タスクを追加</button>
+          </div>
+          <div id="hobbyTaskList" class="task-list activity-task-list"></div>
+          <div id="hobbyTaskEmpty" class="research-empty" hidden>
+            <span class="research-empty-mark" aria-hidden="true">✦</span>
+            <p>趣味タスクはまだありません。</p>
+            <button class="text-button" type="button" data-activity-task-add="hobby">趣味タスクを追加</button>
+          </div>
+        </section>
         <div id="hobbySettingsMenu" class="hobby-settings-menu" hidden>
           <div class="hobby-settings-backdrop" data-hobby-action="close-settings"></div>
           <section class="hobby-settings-panel" role="dialog" aria-modal="true" aria-labelledby="hobbySettingsTitle">
@@ -422,6 +438,22 @@
         <div class="blank-page-panel" aria-label="創作ページの内容">
           <div class="blank-page-mark" aria-hidden="true">✎</div>
         </div>
+        <section class="research-panel activity-task-panel" aria-labelledby="creationTaskTitle">
+          <div class="research-panel-heading activity-tasks-heading">
+            <div>
+              <p class="section-kicker">CREATION TASKS</p>
+              <h2 id="creationTaskTitle">創作タスク</h2>
+              <p id="creationTaskDescription">タグに「創作」を付けたタスクがここに表示されます。</p>
+            </div>
+            <button id="addCreationTaskButton" class="secondary-button" type="button" data-activity-task-add="creation">＋ 創作タスクを追加</button>
+          </div>
+          <div id="creationTaskList" class="task-list activity-task-list"></div>
+          <div id="creationTaskEmpty" class="research-empty" hidden>
+            <span class="research-empty-mark" aria-hidden="true">✎</span>
+            <p>創作タスクはまだありません。</p>
+            <button class="text-button" type="button" data-activity-task-add="creation">創作タスクを追加</button>
+          </div>
+        </section>
       </section>
 
       <div id="customActivityPages" class="custom-activity-pages"></div>
@@ -537,6 +569,25 @@
             <p class="settings-help-text">活動を削除しても、その活動に保存済みのデータは削除されません。</p>
           </section>
 
+          <section class="app-settings-section">
+            <div class="app-settings-section-heading">
+              <div>
+                <p class="section-kicker">TAGS</p>
+                <h3>タグ候補</h3>
+                <p>活動ページ名は自動で候補になります。任意のタグ候補も追加・削除できます。</p>
+              </div>
+            </div>
+            <div id="settingsTagList" class="settings-tag-list"></div>
+            <div class="settings-add-tag">
+              <label>
+                新しいタグ候補
+                <input id="newTagName" type="text" maxlength="40" placeholder="例：VGP" />
+              </label>
+              <button id="addTagButton" class="secondary-button" type="button">＋ タグを追加</button>
+            </div>
+            <p class="settings-help-text">候補を削除しても、既存タスクに付いたタグは削除されません。</p>
+          </section>
+
           <div class="app-settings-footer">
             <button id="resetAppSettingsButton" class="settings-reset-button" type="button">初期設定に戻す</button>
             <span class="action-spacer"></span>
@@ -562,19 +613,20 @@
             <input id="taskTitle" type="text" maxlength="120" required placeholder="例：実験データを整理" />
           </label>
           <label class="field-span-2">
-            タグ（カンマ区切り）
-            <input id="taskTags" type="text" maxlength="300" placeholder="例：研究, VGP" />
+            タグ
+            <div id="taskTagPicker" class="tag-picker">
+              <div id="taskSelectedTags" class="tag-picker-selected" aria-live="polite"></div>
+              <input id="taskTagInput" type="text" maxlength="40" placeholder="候補から選択" autocomplete="off" aria-autocomplete="list" aria-controls="taskTagSuggestions" />
+              <div id="taskTagSuggestions" class="tag-picker-suggestions" role="listbox" hidden></div>
+            </div>
+            <input id="taskTags" type="hidden" />
+            <small class="field-help">候補は設定から追加・削除できます。</small>
           </label>
           <label class="field-span-2">
             研究プラン（任意）
             <select id="taskResearchPlan">
               <option value="">紐付けない</option>
             </select>
-          </label>
-          <label class="toggle-field field-span-2">
-            <input id="taskIsResearch" type="checkbox" />
-            <span class="toggle-control" aria-hidden="true"></span>
-            <span>研究タスクとして研究ページに表示する</span>
           </label>
           <label class="field-span-2">
             メモ
