@@ -235,6 +235,7 @@
       conceptType: "identity_prediction",
       outputTemplate: "{speaker}「{body}」",
       charsPerMinute: 300,
+      position: 999,
     });
   }
 
@@ -253,6 +254,10 @@
       if (!state.speakers.some((item) => item.id === speaker.id)) state.speakers.push(normalizeSpeaker(speaker));
     });
     if (!state.projects.some((project) => project.id === IDENTITY_PROJECT_ID)) state.projects.push(specialProject());
+    const positivePositions = state.projects.map((project) => Number(project.position)).filter((position) => position > 0);
+    if (positivePositions.length <= 1) {
+      state.projects = state.projects.map((project, index) => ({ ...project, position: index }));
+    }
     LEGACY_SEED.notes.forEach((note) => {
       if (note.projectId && !state.concepts.some((concept) => concept.projectId === note.projectId)) {
         state.concepts.push(normalizeConcept({ projectId: note.projectId, body: note.body }));
@@ -361,6 +366,7 @@
         concept_type: "generic",
         output_template: project.outputTemplate,
         chars_per_minute: project.charsPerMinute,
+        position: index,
       }));
     const missingChapters = LEGACY_SEED.chapters
       .filter((chapter) => !state.chapters.some((item) => item.id === chapter.id))
@@ -383,6 +389,7 @@
         concept_type: "identity_prediction",
         output_template: "{speaker}「{body}」",
         chars_per_minute: 300,
+        position: LEGACY_SEED.projects.length,
       },
     ];
     await upsertRows(TABLES.projects, rows, "id");
