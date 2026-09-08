@@ -1303,47 +1303,51 @@
       const ratio = ((item.date.getTime() - now) / span) * 100;
       const schedule = item.schedule;
       const plan = getPlanById(schedule.planId);
-      return
-        "<article class="research-timeline-card" data-schedule-id="" + escapeHtml(schedule.id) + "" style="--timeline-position: " + Math.max(4, Math.min(96, ratio)) + "%">" +
-          "<time datetime="" + escapeHtml(schedule.scheduledAt) + "">" + escapeHtml(formatScheduleDateTime(schedule.scheduledAt)) + "</time>" +
-          "<strong>" + escapeHtml(schedule.title) + "</strong>" +
-          "<span>" + escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind]) + (plan ? " · " + escapeHtml(plan.title) : "") + "</span>" +
-          "<div class="research-item-actions">" +
-            "<button class="task-action" type="button" data-research-action="edit-schedule">編集</button>" +
-            "<button class="task-action delete" type="button" data-research-action="delete-schedule">削除</button>" +
-          "</div>" +
-        "</article>";
+      return `
+        <article class="research-timeline-card" data-schedule-id="${escapeHtml(schedule.id)}" style="--timeline-position: ${Math.max(4, Math.min(96, ratio))}%">
+          <time datetime="${escapeHtml(schedule.scheduledAt)}">${escapeHtml(formatScheduleDateTime(schedule.scheduledAt))}</time>
+          <strong>${escapeHtml(schedule.title)}</strong>
+          <span>${escapeHtml(SCHEDULE_KIND_LABELS[schedule.kind])}${plan ? " · " + escapeHtml(plan.title) : ""}</span>
+          <div class="research-item-actions">
+            <button class="task-action" type="button" data-research-action="edit-schedule">編集</button>
+            <button class="task-action delete" type="button" data-research-action="delete-schedule">削除</button>
+          </div>
+        </article>
+      `;
     }).join("");
 
-    const tick = (label, timestamp, position) =>
-      "<span class="research-timeline-tick" style="left: " + position + "%">" +
-        "<strong>" + escapeHtml(label) + "</strong>" +
-        "<small>" + escapeHtml(dateTimeFormatter.format(new Date(timestamp))) + "</small>" +
-      "</span>";
+    const tick = (label, timestamp, position) => `
+      <span class="research-timeline-tick" style="left: ${position}%">
+        <strong>${escapeHtml(label)}</strong>
+        <small>${escapeHtml(dateTimeFormatter.format(new Date(timestamp)))}</small>
+      </span>
+    `;
     const overflow = (label, list, position, modifier = "") => {
       if (!list.length) return "";
       const titles = list.map((item) => item.schedule.title).join("、");
-      return
-        "<div class="research-timeline-overflow " + modifier + "" style="left: " + position + "%" title="" + escapeHtml(titles) + "">" +
-          "<strong>" + escapeHtml(label + list.length + "件") + "</strong>" +
-          "<span>範囲外の予定</span>" +
-        "</div>";
+      return `
+        <div class="research-timeline-overflow ${modifier}" style="left: ${position}%" title="${escapeHtml(titles)}">
+          <strong>${escapeHtml(label + list.length + "件")}</strong>
+          <span>範囲外の予定</span>
+        </div>
+      `;
     };
 
-    return
-      "<div class="research-timeline">" +
-        "<div class="research-timeline-scroll">" +
-          "<div class="research-timeline-axis">" +
-            "<span class="research-timeline-line" aria-hidden="true"></span>" +
-            tick("現在", now, 2) +
-            tick("+" + horizonDays + "日", horizon, 98) +
-            overflow("過去", pastItems, 2, "is-past") +
-            overflow("他", futureItems, 98, "is-future") +
-            overflow("日付不明", invalidItems, 50, "is-invalid") +
-            timelineItems +
-          "</div>" +
-        "</div>" +
-      "</div>";
+    return `
+      <div class="research-timeline">
+        <div class="research-timeline-scroll">
+          <div class="research-timeline-axis">
+            <span class="research-timeline-line" aria-hidden="true"></span>
+            ${tick("現在", now, 2)}
+            ${tick("+" + horizonDays + "日", horizon, 98)}
+            ${overflow("過去", pastItems, 2, "is-past")}
+            ${overflow("他", futureItems, 98, "is-future")}
+            ${overflow("日付不明", invalidItems, 50, "is-invalid")}
+            ${timelineItems}
+          </div>
+        </div>
+      </div>
+    `;
   }
   function renderResearchSchedule(schedule) {
     const plan = getPlanById(schedule.planId);
