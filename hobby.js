@@ -98,6 +98,9 @@
     selectedTargetId: "red-mist",
     selectedSectionId: "identity",
     activeTab: "concept",
+    settingsOpen: false,
+    settingsSection: "project",
+    draggedProjectId: "",
     lastUserId: null,
     initialized: false,
   };
@@ -143,6 +146,7 @@
       charsPerMinute: Number(row.chars_per_minute || row.charsPerMinute || 300),
       createdAt: row.created_at || row.createdAt || now(),
       updatedAt: row.updated_at || row.updatedAt || now(),
+      position: Number.isFinite(Number(row.position)) ? Number(row.position) : 0,
     };
   }
 
@@ -320,7 +324,7 @@
 
   async function fetchRemoteData() {
     const requests = await Promise.all([
-      remoteClient.from(TABLES.projects).select("*").order("updated_at", { ascending: false }),
+      remoteClient.from(TABLES.projects).select("*").order("position", { ascending: true }).order("updated_at", { ascending: false }),
       remoteClient.from(TABLES.chapters).select("*").order("position", { ascending: true }),
       remoteClient.from(TABLES.lines).select("*").order("position", { ascending: true }),
       remoteClient.from(TABLES.speakers).select("*").order("position", { ascending: true }),
@@ -329,7 +333,10 @@
     ]);
     const error = requests.find((result) => result.error)?.error;
     if (error) throw error;
-    state.projects = (requests[0].data || []).map(normalizeProject);
+    const projectRows = requests[0].data || [];
+    const positivePositions = projectRows.map((row) => Number(row.position)).filter((position) => position > 0);
+    const hasStoredOrder = positivePositions.length > 1 || (projectRows.length === 1 && positivePositions.length === 1);
+    state.projects = projectRows.map((row, index) => normalizeProject({ ...row, position: hasStoredOrder ? row.position : index }));
     state.chapters = (requests[1].data || []).map(normalizeChapter);
     state.lines = (requests[2].data || []).map(normalizeLine);
     state.speakers = (requests[3].data || []).map(normalizeSpeaker);
@@ -449,6 +456,7 @@
         concept_type: project.conceptType,
         output_template: project.outputTemplate,
         chars_per_minute: project.charsPerMinute,
+        position: project.position,
         updated_at: project.updatedAt,
       }, { onConflict: "id" }).select("*").single();
       if (result.error) throw result.error;
@@ -580,17 +588,70 @@
   }
 
 
+  function orderedProjects() {
+    return [...state.projects].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0) || new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+  }
+
+  function normalizeProjectPositions() {
+    state.projects = orderedProjects().map((project, index) => ({ ...project, position: index }));
+  }
+
   function renderProjectList() {
     const container = $("hobbyProjectList");
-    if (!container) return;
-    const projects = [...state.projects].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    container.innerHTML = projects.map((project) => (
-      '<button class="hobby-project-card' + (project.id === state.selectedProjectId ? ' is-active' : '') + '" type="button" data-hobby-action="select-project" data-project-id="' + escapeHtml(project.id) + '">' +
+    const empty = $("hobbyProjectEmpty");
+    if (!container || !empty) return;
+    const projects = orderedProjects();
+    container.innerHTML = projects.map((project) =>
+      '<button class="hobby-project-card' + (project.id === state.selectedProjectId ? " is-active" : "") + '" type="button" draggable="true" data-hobby-action="select-project" data-project-id="' + escapeHtml(project.id) + '" title="ドラッグして並び替え">' +
         '<span class="hobby-project-card-name">' + escapeHtml(project.name) + "</span>" +
-        '<span class="hobby-project-card-meta">' + (project.conceptType === "identity_prediction" ? "特色人格構想" : "動画プロジェクト") + "</span>" +
-      "</button>"
-    )).join("");
-    $("hobbyProjectEmpty").hidden = projects.length !== 0;
+        '<span class="hobby-project-card-meta">' + (project.conceptType === "identity_prediction" ? "特色人格予想" : "動画プロジェクト") + "</span></button>"
+    ).join("");
+    empty.hidden = projects.length !== 0;
+    renderProjectManageList();
+  }
+
+  function renderProjectManageList() {
+    const container = $("hobbyProjectManageList");
+    if (!container) return;
+    container.innerHTML = orderedProjects().map((project) =>
+      '<div class="hobby-project-manage-row" draggable="true" data-project-id="' + escapeHtml(project.id) + '">' +
+        '<button class="hobby-project-manage-select" type="button" data-hobby-action="select-project" data-project-id="' + escapeHtml(project.id) + '">' +
+          '<span class="hobby-project-manage-grip" aria-hidden="true">☷</span><span><strong>' + escapeHtml(project.name) + "</strong><small>" + (project.conceptType === "identity_prediction" ? "特色人格予想" : "動画プロジェクト") + "</small></span></button>" +
+        '<span class="hobby-project-manage-actions"><button class="secondary-button" type="button" data-hobby-action="edit-project" data-project-id="' + escapeHtml(project.id) + '">名称変更</button><button class="ghost-button" type="button" data-hobby-action="delete-project" data-project-id="' + escapeHtml(project.id) + '">削除</button></span>' +
+      "</div>"
+    ).join("");
+  }
+
+  function renderSpeakerSettings() {
+    const list = $("hobbySettingsSpeakerList");
+    if (!list) return;
+    list.innerHTML = state.speakers.slice().sort((a, b) => a.position - b.position).map((speaker) =>
+      '<li><span>' + escapeHtml(speaker.name) + '</span><button class="ghost-button" type="button" data-hobby-action="delete-speaker" data-speaker-id="' + escapeHtml(speaker.id) + '">削除</button></li>'
+    ).join("");
+  }
+
+  function renderSettings() {
+    const menu = $("hobbySettingsMenu");
+    if (!menu) return;
+    menu.hidden = !state.settingsOpen;
+    $("hobbySettingsProjectPanel").hidden = state.settingsSection !== "project";
+    $("hobbySettingsSpeakerPanel").hidden = state.settingsSection !== "speakers";
+    document.querySelectorAll("#hobbySettingsMenu .hobby-settings-tab").forEach((tab) => {
+      tab.classList.toggle("is-active", state.settingsSection === (tab.dataset.hobbyAction === "open-settings-speakers" ? "speakers" : "project"));
+    });
+    renderProjectManageList();
+    renderSpeakerSettings();
+  }
+
+  function openSettings(section = "project") {
+    state.settingsOpen = true;
+    state.settingsSection = section;
+    renderSettings();
+  }
+
+  function closeSettings() {
+    state.settingsOpen = false;
+    renderSettings();
   }
 
   function renderConcept() {
@@ -632,44 +693,38 @@
 
   function renderScript() {
     const project = getProject();
-    if (!project) return;
-    const chapters = getChapters(project.id);
-    if (!state.selectedChapterId || !chapters.some((chapter) => chapter.id === state.selectedChapterId)) {
-      state.selectedChapterId = chapters[0]?.id || "";
-    }
-    $("hobbyChapterList").innerHTML = chapters.map((chapter) => (
-      '<button class="hobby-chapter-button' + (chapter.id === state.selectedChapterId ? " is-active" : "") + '" type="button" data-hobby-action="select-chapter" data-chapter-id="' + escapeHtml(chapter.id) + '">' + escapeHtml(chapter.name) + "</button>"
-    )).join("");
+    const chapters = project ? getChapters(project.id) : [];
+    $("hobbyChapterList").innerHTML = chapters.map((chapter) =>
+      '<button class="hobby-chapter-item' + (chapter.id === state.selectedChapterId ? " is-active" : "") + '" type="button" data-hobby-action="select-chapter" data-chapter-id="' + escapeHtml(chapter.id) + '">' + escapeHtml(chapter.name) + "</button>"
+    ).join("");
     $("hobbyChapterEmpty").hidden = chapters.length !== 0;
-    const chapter = chapters.find((item) => item.id === state.selectedChapterId);
-    $("hobbyCurrentChapterName").textContent = chapter?.name || "チャプター未選択";
-    const lines = getLines(chapter?.id);
-    const speakerOptions = state.speakers.slice().sort((a, b) => a.position - b.position).map((speaker) => (
-      '<option value="' + escapeHtml(speaker.name) + '"' + (speaker.name === "" ? " selected" : "") + ">" + escapeHtml(speaker.name) + "</option>"
-    )).join("");
-
-    $("hobbyLineList").innerHTML = lines.map((line, index) => {
+    if (!project) return;
+    const chapter = chapters.find((item) => item.id === state.selectedChapterId) || chapters[0];
+    if (!chapter) {
+      $("hobbyLineList").innerHTML = "";
+      $("hobbyLineEmpty").hidden = false;
+      return;
+    }
+    state.selectedChapterId = chapter.id;
+    const lines = getLines(chapter.id);
+    const speakerOptions = '<option value="">話者なし</option>' + state.speakers.slice().sort((a, b) => a.position - b.position).map((speaker) => '<option value="' + escapeHtml(speaker.name) + '">' + escapeHtml(speaker.name) + "</option>").join("");
+    const insertButton = (index) => '<button class="hobby-line-insert" type="button" data-hobby-action="insert-line" data-chapter-id="' + escapeHtml(chapter.id) + '" data-insert-index="' + index + '" aria-label="この位置にセリフを追加">＋</button>';
+    let html = insertButton(0);
+    html += lines.map((line, index) => {
       let options = speakerOptions;
-      if (line.speaker && !state.speakers.some((speaker) => speaker.name === line.speaker)) {
-        options = '<option value="' + escapeHtml(line.speaker) + '" selected>' + escapeHtml(line.speaker) + "</option>" + options;
-      } else if (line.speaker) {
-        options = options.replace('value="' + escapeHtml(line.speaker) + '"', 'value="' + escapeHtml(line.speaker) + '" selected');
-      }
+      if (line.speaker && !state.speakers.some((speaker) => speaker.name === line.speaker)) options = '<option value="' + escapeHtml(line.speaker) + '" selected>' + escapeHtml(line.speaker) + "</option>" + options;
+      else if (line.speaker) options = options.replace('value="' + escapeHtml(line.speaker) + '"', 'value="' + escapeHtml(line.speaker) + '" selected');
       return '<article class="hobby-dialogue-line" data-line-id="' + escapeHtml(line.id) + '">' +
-        '<div class="hobby-line-toolbar"><span class="hobby-line-number">' + (index + 1) + "</span>" +
-        '<select data-script-action="speaker">' + options + "</select>" +
-        '<button type="button" data-hobby-action="move-up" aria-label="上へ">↑</button>' +
-        '<button type="button" data-hobby-action="move-down" aria-label="下へ">↓</button>' +
-        '<button type="button" data-hobby-action="delete-line" aria-label="削除">削除</button></div>' +
-        '<textarea rows="3" data-script-action="body" placeholder="セリフ本文">' + escapeHtml(line.body) + "</textarea></article>";
+        '<div class="hobby-line-toolbar"><span class="hobby-line-number">' + (index + 1) + "</span><select data-script-action=\"speaker\">" + options + "</select>" +
+        '<button type="button" data-hobby-action="move-up" aria-label="上へ">↑</button><button type="button" data-hobby-action="move-down" aria-label="下へ">↓</button><button type="button" data-hobby-action="delete-line" aria-label="削除">削除</button></div>' +
+        '<textarea rows="3" data-script-action="body" placeholder="セリフ本文">' + escapeHtml(line.body) + "</textarea></article>" + insertButton(index + 1);
     }).join("");
+    $("hobbyLineList").innerHTML = html;
     $("hobbyLineEmpty").hidden = lines.length !== 0;
-    const allText = state.lines.filter((line) => getChapters(project.id).some((chapter) => chapter.id === line.chapterId)).map((line) => line.body).join("");
-    const characters = allText.length;
-    $("hobbyScriptStats").textContent = characters + "文字 / 約" + Math.max(0, Math.ceil(characters / Math.max(1, project.charsPerMinute))) + "分";
+    const allText = state.lines.filter((line) => getChapters(project.id).some((item) => item.id === line.chapterId)).map((line) => line.body).join("");
+    $("hobbyScriptStats").textContent = allText.length + "文字 / 約" + Math.max(0, Math.ceil(allText.length / Math.max(1, project.charsPerMinute))) + "分";
     $("hobbyOutputTemplate").value = project.outputTemplate;
     $("hobbyCharsPerMinute").value = String(project.charsPerMinute);
-    $("hobbySpeakerList").innerHTML = state.speakers.slice().sort((a, b) => a.position - b.position).map((speaker) => "<li>" + escapeHtml(speaker.name) + "</li>").join("");
   }
 
   function renderWorkspace() {
@@ -679,7 +734,6 @@
     if (!project) return;
     $("hobbyProjectTitle").textContent = project.name;
     $("hobbyProjectType").textContent = project.conceptType === "identity_prediction" ? "特色人格予想プロジェクト" : "動画プロジェクト";
-    $("hobbyIdentityModeButton").hidden = project.conceptType === "identity_prediction";
     document.querySelectorAll("[data-hobby-tab]").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.hobbyTab === state.activeTab));
     $("hobbyConceptPane").hidden = state.activeTab !== "concept";
     $("hobbyScriptPane").hidden = state.activeTab !== "script";
@@ -691,6 +745,7 @@
     if (!page()) return;
     renderProjectList();
     renderWorkspace();
+    renderSettings();
   }
 
   async function createProject() {
@@ -699,11 +754,13 @@
     const project = normalizeProject({
       id: createId(),
       name: name.trim(),
-      conceptType: name.includes("特色人格") ? "identity_prediction" : "generic",
+      conceptType: "generic",
       outputTemplate: "{speaker}「{body}」",
       charsPerMinute: 300,
+      position: state.projects.length,
     });
-    state.projects.unshift(project);
+    state.projects.push(project);
+    normalizeProjectPositions();
     state.selectedProjectId = project.id;
     state.selectedChapterId = "";
     state.concepts.push(normalizeConcept({ projectId: project.id, conceptType: project.conceptType, toolKey: project.conceptType === "identity_prediction" ? "colored-fixer-notes" : "" }));
@@ -719,8 +776,7 @@
     }
   }
 
-  async function editProject() {
-    const project = getProject();
+  async function editProject(project = getProject()) {
     if (!project) return;
     const name = window.prompt("プロジェクト名を変更してください。", project.name);
     if (!name?.trim() || name.trim() === project.name) return;
@@ -817,14 +873,16 @@
   }
 
   async function addSpeaker() {
-    const name = $("hobbySpeakerInput").value.trim();
+    const input = $("hobbySettingsSpeakerInput");
+    if (!input) return;
+    const name = input.value.trim();
     if (!name) return;
     if (state.speakers.some((speaker) => speaker.name === name)) {
-      $("hobbySpeakerInput").value = "";
+      input.value = "";
       return;
     }
     const speaker = normalizeSpeaker({ id: createId(), name, position: state.speakers.length + 1 });
-    $("hobbySpeakerInput").value = "";
+    input.value = "";
     await saveSpeaker(speaker);
     notify("話者を追加しました");
   }
@@ -943,64 +1001,127 @@
     URL.revokeObjectURL(anchor.href);
   }
 
+  async function saveProjectOrder() {
+    const rows = state.projects.map((project) => ({ id: project.id, user_id: state.user.id, name: project.name, concept_type: project.conceptType, output_template: project.outputTemplate, chars_per_minute: project.charsPerMinute, position: project.position, updated_at: project.updatedAt }));
+    if (isRemote()) {
+      const result = await remoteClient.from(TABLES.projects).upsert(rows, { onConflict: "id" });
+      if (result.error) throw result.error;
+    }
+    writeLocal();
+  }
+
+  async function reorderProjects(sourceId, targetId) {
+    const projects = orderedProjects();
+    const from = projects.findIndex((project) => project.id === sourceId);
+    const to = projects.findIndex((project) => project.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    const [moved] = projects.splice(from, 1);
+    projects.splice(to, 0, moved);
+    state.projects = projects.map((project, index) => ({ ...project, position: index }));
+    try { await saveProjectOrder(); render(); notify("プロジェクトの順番を保存しました"); }
+    catch (error) { notify("プロジェクト順の保存に失敗しました: " + error.message, true); }
+  }
+
+  function handleDragStart(event) {
+    const item = event.target.closest('[data-project-id][draggable="true"]');
+    if (!item) return;
+    state.draggedProjectId = item.dataset.projectId;
+    item.classList.add("is-dragging");
+    if (event.dataTransfer) { event.dataTransfer.setData("text/plain", state.draggedProjectId); event.dataTransfer.effectAllowed = "move"; }
+  }
+
+  function handleDragOver(event) {
+    const item = event.target.closest('[data-project-id][draggable="true"]');
+    if (!item) return;
+    event.preventDefault();
+    document.querySelectorAll('[data-project-id][draggable="true"]').forEach((current) => current.classList.toggle("is-drag-over", current === item));
+  }
+
+  async function handleDrop(event) {
+    const item = event.target.closest('[data-project-id][draggable="true"]');
+    if (!item) return;
+    event.preventDefault();
+    await reorderProjects(state.draggedProjectId || event.dataTransfer?.getData("text/plain"), item.dataset.projectId);
+  }
+
+  function handleDragEnd() {
+    state.draggedProjectId = "";
+    document.querySelectorAll('[data-project-id][draggable="true"]').forEach((item) => item.classList.remove("is-dragging", "is-drag-over"));
+  }
+
+  async function addLineAt(chapterId, insertIndex) {
+    const chapter = state.chapters.find((item) => item.id === chapterId);
+    if (!chapter) return;
+    const lines = getLines(chapterId);
+    const index = Math.max(0, Math.min(Number(insertIndex) || 0, lines.length));
+    lines.forEach((line, lineIndex) => { if (lineIndex >= index) line.position += 1; });
+    const line = normalizeLine({ id: createId(), chapterId, position: index + 1, speaker: state.speakers[0]?.name || "", body: "" });
+    state.lines.push(line);
+    try {
+      if (isRemote()) {
+        const result = await remoteClient.from(TABLES.lines).upsert(getLines(chapterId).map((current) => ({ id: current.id, user_id: state.user.id, chapter_id: current.chapterId, position: current.position, speaker: current.speaker, body: current.body })), { onConflict: "id" });
+        if (result.error) throw result.error;
+      }
+      writeLocal(); render();
+      window.setTimeout(() => document.querySelector('[data-line-id="' + line.id + '"] textarea')?.focus(), 30);
+    } catch (error) { notify("セリフの追加に失敗しました: " + error.message, true); }
+  }
+
+  async function removeSpeaker(speakerId) {
+    const speaker = state.speakers.find((item) => item.id === speakerId);
+    if (!speaker || !window.confirm("「" + speaker.name + "」を削除しますか？")) return;
+    const affected = state.lines.filter((line) => line.speaker === speaker.name);
+    affected.forEach((line) => { line.speaker = ""; });
+    if (isRemote()) {
+      const deleted = await remoteClient.from(TABLES.speakers).delete().eq("id", speakerId);
+      if (deleted.error) throw deleted.error;
+      if (affected.length) {
+        const updated = await remoteClient.from(TABLES.lines).upsert(affected.map((line) => ({ id: line.id, user_id: state.user.id, chapter_id: line.chapterId, position: line.position, speaker: line.speaker, body: line.body })), { onConflict: "id" });
+        if (updated.error) throw updated.error;
+      }
+    }
+    state.speakers = state.speakers.filter((item) => item.id !== speakerId);
+    writeLocal(); render(); notify("話者を削除しました");
+  }
+
   function handleClick(event) {
     const tab = event.target.closest("[data-hobby-tab]");
-    if (tab) {
-      state.activeTab = tab.dataset.hobbyTab;
-      renderWorkspace();
-      return;
-    }
+    if (tab) { state.activeTab = tab.dataset.hobbyTab; renderWorkspace(); return; }
     const section = event.target.closest("[data-hobby-section]");
-    if (section) {
-      state.selectedSectionId = section.dataset.hobbySection;
-      renderConcept();
-      return;
-    }
+    if (section) { state.selectedSectionId = section.dataset.hobbySection; renderConcept(); return; }
     const identityAction = event.target.closest("[data-identity-action]");
-    if (identityAction?.dataset.identityAction === "remove-custom") {
-      removeCustomField(identityAction.dataset.itemId).catch((error) => notify(error.message, true));
-      return;
-    }
+    if (identityAction?.dataset.identityAction === "remove-custom") { removeCustomField(identityAction.dataset.itemId).catch((error) => notify(error.message, true)); return; }
     const target = event.target.closest("[data-hobby-action]");
     if (!target) return;
     const action = target.dataset.hobbyAction;
-    if (action === "select-project") {
+    if (action === "open-settings" || action === "open-settings-project") openSettings("project");
+    else if (action === "open-settings-speakers") openSettings("speakers");
+    else if (action === "close-settings") closeSettings();
+    else if (action === "select-project") {
       state.selectedProjectId = target.dataset.projectId;
       state.selectedChapterId = getChapters(state.selectedProjectId)[0]?.id || "";
       localStorage.setItem(LOCAL_KEYS.selectedProject, state.selectedProjectId);
       render();
-    } else if (action === "add-project") {
-      createProject();
-    } else if (action === "edit-project") {
-      editProject().catch((error) => notify(error.message, true));
+    } else if (action === "add-project") createProject();
+    else if (action === "edit-project") {
+      const project = state.projects.find((item) => item.id === target.dataset.projectId) || getProject();
+      if (project) editProject(project).catch((error) => notify(error.message, true));
     } else if (action === "delete-project") {
-      removeProject(getProject()).catch((error) => notify(error.message, true));
-    } else if (action === "make-identity") {
-      makeIdentityProject().catch((error) => notify(error.message, true));
-    } else if (action === "add-chapter") {
-      addChapter();
-    } else if (action === "edit-chapter") {
-      editChapter().catch((error) => notify(error.message, true));
-    } else if (action === "delete-chapter") {
-      deleteChapter().catch((error) => notify(error.message, true));
-    } else if (action === "select-chapter") {
-      state.selectedChapterId = target.dataset.chapterId;
-      renderScript();
-    } else if (action === "add-line") {
-      addLine();
-    } else if (action === "add-speaker") {
-      addSpeaker();
-    } else if (action === "move-up" || action === "move-down") {
-      moveLine(target.closest("[data-line-id]")?.dataset.lineId, action === "move-up" ? "up" : "down").catch((error) => notify(error.message, true));
-    } else if (action === "delete-line") {
-      removeLine(target.closest("[data-line-id]")?.dataset.lineId).catch((error) => notify(error.message, true));
-    } else if (action === "add-custom") {
-      addCustomField().catch((error) => notify(error.message, true));
-    } else if (action === "save-concept") {
-      editConcept().catch((error) => notify(error.message, true));
-    } else if (action === "export-script") {
-      exportScript();
-    }
+      const project = state.projects.find((item) => item.id === target.dataset.projectId) || getProject();
+      if (project) removeProject(project).catch((error) => notify(error.message, true));
+    } else if (action === "add-chapter") addChapter();
+    else if (action === "edit-chapter") editChapter().catch((error) => notify(error.message, true));
+    else if (action === "delete-chapter") deleteChapter().catch((error) => notify(error.message, true));
+    else if (action === "select-chapter") { state.selectedChapterId = target.dataset.chapterId; renderScript(); }
+    else if (action === "add-line") addLine();
+    else if (action === "insert-line") addLineAt(target.dataset.chapterId, target.dataset.insertIndex);
+    else if (action === "add-speaker") addSpeaker();
+    else if (action === "delete-speaker") removeSpeaker(target.dataset.speakerId).catch((error) => notify(error.message, true));
+    else if (action === "move-up" || action === "move-down") moveLine(target.closest("[data-line-id]")?.dataset.lineId, action === "move-up" ? "up" : "down").catch((error) => notify(error.message, true));
+    else if (action === "delete-line") removeLine(target.closest("[data-line-id]")?.dataset.lineId).catch((error) => notify(error.message, true));
+    else if (action === "add-custom") addCustomField().catch((error) => notify(error.message, true));
+    else if (action === "save-concept") editConcept().catch((error) => notify(error.message, true));
+    else if (action === "export-script") exportScript();
   }
 
   function handleChange(event) {
@@ -1046,11 +1167,18 @@
     root.addEventListener("click", handleClick);
     root.addEventListener("change", handleChange);
     root.addEventListener("blur", handleBlur, true);
+    root.addEventListener("dragstart", handleDragStart);
+    root.addEventListener("dragover", handleDragOver);
+    root.addEventListener("drop", handleDrop);
+    root.addEventListener("dragend", handleDragEnd);
     const observer = new MutationObserver(() => {
       if (root.hidden) return;
       render();
     });
     observer.observe(root, { attributes: true, attributeFilter: ["hidden"] });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.settingsOpen) closeSettings();
+    });
     window.addEventListener("hashchange", () => {
       if (window.location.hash.replace("#", "").toLowerCase() === "hobby") render();
     });
