@@ -452,7 +452,24 @@
     }
   }
   async function copyText(value) {
-    await navigator.clipboard.writeText(value);
+    try {
+      await navigator.clipboard.writeText(String(value || ""));
+      return true;
+    } catch (_) {
+      const fallback = document.createElement("textarea");
+      fallback.value = String(value || "");
+      fallback.setAttribute("readonly", "");
+      fallback.style.position = "fixed";
+      fallback.style.opacity = "0";
+      document.body.appendChild(fallback);
+      fallback.focus();
+      fallback.select();
+      fallback.setSelectionRange(0, fallback.value.length);
+      const copied = document.execCommand("copy");
+      fallback.remove();
+      if (!copied) throw new Error("コピーに失敗しました。表示された内容を手動でコピーしてください。");
+      return true;
+    }
   }
 
   function buildSolPrompt(markdown, instruction = "") {
@@ -491,10 +508,11 @@
     if (solWindow) solWindow.opener = null;
     try {
       await copyText(solPrompt);
-    } catch (_) {
-      elements.researchPacketOutput?.select?.();
+    } catch (error) {
+      setAdoptionStatus(error.message || "Sol用プロンプトのコピーに失敗しました。", true);
+      return;
     }
-    setAdoptionStatus("Solへの分析指示とResearch Packetをコピーし、Solの画面を開きました。");
+    setAdoptionStatus("Sol用の分析指示とResearch Packet全体をコピーしました。ChatGPT側に貼り付けてください。");
   }
   function saveSolDraft() {
     const response = elements.researchSolResponse.value.trim();
