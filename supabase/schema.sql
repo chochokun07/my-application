@@ -24,6 +24,9 @@ create table if not exists public.tasks (
 alter table public.tasks
   add column if not exists tags text[] not null default '{}';
 
+alter table public.tasks
+  add column if not exists research_report text;
+
 create table if not exists public.research_plans (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -50,6 +53,15 @@ create table if not exists public.research_schedules (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.research_plans
+  add column if not exists origin_facts text;
+
+alter table public.research_plans
+  add column if not exists hypothesis text;
+
+alter table public.research_plans
+  add column if not exists hypothesis_basis text;
 
 alter table public.tasks
   add column if not exists is_research boolean not null default false;
