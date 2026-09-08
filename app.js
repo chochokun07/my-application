@@ -608,18 +608,26 @@
     });
   }
 
+  function setAppSettingsMenuOpen(isOpen) {
+    if (!elements.appSettingsMenu) return;
+    elements.appSettingsMenu.hidden = !isOpen;
+    elements.appSettingsButton?.setAttribute("aria-expanded", String(isOpen));
+  }
+
   function openAppSettings() {
     elements.accountMenu.hidden = true;
     state.settingsDraft = normalizeAppSettings(state.appSettings);
     fillAppSettingsForm(state.settingsDraft);
-    elements.appSettingsMenu.hidden = false;
+    setAppSettingsMenuOpen(true);
     document.body.classList.add("modal-open");
-    window.setTimeout(() => elements.settingsAppName.focus(), 40);
+    window.setTimeout(() => {
+      if (!elements.appSettingsMenu.hidden) elements.settingsAppName.focus();
+    }, 40);
   }
 
   function closeAppSettings() {
     if (!elements.appSettingsMenu) return;
-    elements.appSettingsMenu.hidden = true;
+    setAppSettingsMenuOpen(false);
     state.settingsDraft = null;
     if (
       elements.taskModal.hidden &&
@@ -797,6 +805,7 @@
 
   function showAuth(message = "") {
     closeSidebar();
+    closeAppSettings();
     elements.appShell.hidden = true;
     elements.authShell.hidden = false;
     elements.sidebarToggle.disabled = true;
