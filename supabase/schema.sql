@@ -198,6 +198,7 @@ create table if not exists public.script_projects (
   output_template text not null default '{speaker}「{body}」',
   chars_per_minute integer not null default 300
     check (chars_per_minute between 1 and 2000),
+  position integer not null default 0 check (position >= 0),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -260,6 +261,12 @@ create table if not exists public.identity_concept_items (
 create unique index if not exists identity_concept_items_fixed_field_idx
   on public.identity_concept_items (project_id, target_id, section_id, field_key)
   where field_key is not null;
+
+alter table public.script_projects
+  add column if not exists position integer not null default 0 check (position >= 0);
+
+create index if not exists script_projects_user_position_idx
+  on public.script_projects (user_id, position);
 
 create index if not exists script_projects_user_updated_idx
   on public.script_projects (user_id, updated_at desc);
