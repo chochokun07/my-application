@@ -2,6 +2,8 @@
   "use strict";
 
   const STORAGE_KEY = "my-application.tasks.v0.1";
+  const NOTIFIED_REMINDERS_STORAGE_KEY = "my-application.notified-reminders.v0.1";
+  const REMINDER_CHECK_INTERVAL_MS = 15000;
   const APP_SETTINGS_STORAGE_KEY = "my-application.app-settings.v0.1";
   const REMOTE_SETTINGS_KEY = "my_application_settings";
   const RESEARCH_PLANS_STORAGE_KEY = "my-application.research-plans.v0.1";
@@ -72,6 +74,8 @@
     researchPlanSchemaAvailable: true,
     researchDataError: "",
     toastTimer: null,
+    notificationTimer: null,
+    notificationWarningAt: 0,
   };
 
   window.__VECTORY_APP_CONTEXT__ = {
@@ -526,6 +530,111 @@
     elements.toast.classList.toggle("is-error", isError);
     elements.toast.classList.add("is-visible");
     state.toastTimer = window.setTimeout(() => elements.toast.classList.remove("is-visible"), 2800);
+  }
+
+  function readNotifiedReminderKeys() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(NOTIFIED_REMINDERS_STORAGE_KEY) || "[]");
+      return new Set(Array.isArray(saved) ? saved.filter((value) => typeof value === "string") : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function writeNotifiedReminderKeys(keys) {
+    try {
+      localStorage.setItem(NOTIFIED_REMINDERS_STORAGE_KEY, JSON.stringify([...keys].slice(-200)));
+    } catch (_) {
+      // 通知済み記録を保存できない環境でも、通知自体は継続する。
+    }
+  }
+
+  async function ensureNotificationPermission() {
+    const NotificationApi = window.Notification;
+    if (!NotificationApi) {
+      showToast("このブラウザは通知に対応していません。", true);
+      return false;
+    }
+    if (NotificationApi.permission === "granted") return true;
+    if (NotificationApi.permission === "denied") {
+      showToast("通知がブロックされています。ブラウザのサイト設定から許可してください。", true);
+      return false;
+    }
+    try {
+      const permission = await NotificationApi.requestPermission();
+      if (permission === "granted") {
+        showToast("ブラウザ通知を有効にしました。");
+        return true;
+      }
+    } catch (error) {
+      console.warn("通知許可の取得に失敗しました", error);
+    }
+    showToast("通知を許可すると、設定時刻にタスクを知らせます。", true);
+    return false;
+  }
+
+  function showTaskReminder(task) {
+    const NotificationApi = window.Notification;
+    if (!NotificationApi || NotificationApi.permission !== "granted") return false;
+    try {
+      const notification = new NotificationApi("タスクの通知", {
+        body: "「" + task.title + "」の予定時刻です。",
+        icon: "./assets/icon-192.png",
+        tag: "task-reminder-" + task.id,
+      });
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+        const currentTask = state.tasks.find((item) => item.id === task.id);
+        if (!currentTask) return;
+        if (state.sidebarView !== "home" && state.sidebarView !== "todo") navigateToPage("home");
+        window.setTimeout(() => openTaskModal(currentTask), 0);
+      };
+      return true;
+    } catch (error) {
+      console.warn("タスク通知の表示に失敗しました", error);
+      return false;
+    }
+  }
+
+  function checkTaskReminders() {
+    const dueTasks = state.tasks.filter((task) => {
+      if (!task.reminderEnabled || !task.reminderAt || task.status === "completed") return false;
+      const reminderTime = new Date(task.reminderAt).getTime();
+      return Number.isFinite(reminderTime) && reminderTime <= Date.now();
+    });
+    if (!dueTasks.length) return;
+
+    const NotificationApi = window.Notification;
+    if (!NotificationApi || NotificationApi.permission !== "granted") {
+      const now = Date.now();
+      if (now - state.notificationWarningAt >= 60000) {
+        state.notificationWarningAt = now;
+        showToast("通知の許可が必要なタスクがあります。タスク編集画面で通知を有効にしてください。", true);
+      }
+      return;
+    }
+
+    const notifiedKeys = readNotifiedReminderKeys();
+    let changed = false;
+    dueTasks.forEach((task) => {
+      const key = String(task.id) + ":" + String(task.reminderAt);
+      if (notifiedKeys.has(key)) return;
+      if (showTaskReminder(task)) {
+        notifiedKeys.add(key);
+        changed = true;
+      }
+    });
+    if (changed) writeNotifiedReminderKeys(notifiedKeys);
+  }
+
+  function startReminderWatcher() {
+    if (state.notificationTimer) return;
+    const check = () => checkTaskReminders();
+    state.notificationTimer = window.setInterval(check, REMINDER_CHECK_INTERVAL_MS);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    check();
   }
 
   function setAuthMessage(message = "", type = "") {
@@ -1550,6 +1659,7 @@
     state.tasks = (result.data || []).map(normalizeTask);
     setSyncStatus("同期済み", "synced");
     render();
+    checkTaskReminders();
   }
 
   async function loadRemoteResearchData() {
@@ -1684,6 +1794,15 @@
   async function saveTask(event) {
     event.preventDefault();
     if (!elements.taskForm.reportValidity()) return;
+    if (elements.taskReminderEnabled.checked && !elements.taskReminderAt.value) {
+      showToast("通知日時を設定してください。", true);
+      elements.taskReminderAt.focus();
+      return;
+    }
+    if (elements.taskReminderEnabled.checked && !(await ensureNotificationPermission())) {
+      elements.taskReminderEnabled.checked = false;
+      return;
+    }
     const task = getTaskFromForm();
     const isEditing = Boolean(state.editingTaskId);
     const saveButton = $("saveTaskButton");
@@ -1708,6 +1827,7 @@
       }
       closeTaskModal();
       render();
+      checkTaskReminders();
       showToast(isEditing ? "タスクを更新しました" : "タスクを追加しました");
     } catch (error) {
       setSyncStatus("同期エラー", "error");
@@ -2225,6 +2345,7 @@
     setSyncStatus("この端末のみ", "local");
     window.dispatchEvent(new CustomEvent("vectory:session-change", { detail: { signedIn: false } }));
     showApp();
+    checkTaskReminders();
   }
 
   function enterSyncMode() {
@@ -2342,6 +2463,10 @@
     elements.closeTaskModal.addEventListener("click", closeTaskModal);
     elements.cancelTaskButton.addEventListener("click", closeTaskModal);
     elements.taskForm.addEventListener("submit", saveTask);
+    elements.taskReminderEnabled.addEventListener("change", async (event) => {
+      if (!event.target.checked) return;
+      if (!(await ensureNotificationPermission())) event.target.checked = false;
+    });
     elements.taskTagPicker.addEventListener("click", handleTaskTagPickerClick);
     elements.taskTagInput.addEventListener("focus", showTaskTagSuggestions);
     elements.taskTagInput.addEventListener("input", renderTaskTagPicker);
@@ -2438,6 +2563,7 @@
 
   async function boot() {
     bindEvents();
+    startReminderWatcher();
     updateAuthMode();
 
     if (!supabaseClient || localStorage.getItem(LOCAL_MODE_KEY) === "true") {
