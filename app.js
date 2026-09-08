@@ -1243,7 +1243,7 @@
             <span class="research-plan-task-title">${escapeHtml(task.title)}</span>
             <span class="research-plan-task-arrow" aria-hidden="true">→</span>
           </button>
-        }).join("")
+        `).join("")
       : '<p class="research-plan-task-empty">未完了の進捗タスクはありません。</p>';
 
     return `
