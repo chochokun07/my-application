@@ -1339,7 +1339,7 @@
           <div class="research-timeline-axis">
             <span class="research-timeline-line" aria-hidden="true"></span>
             ${tick("現在", now, 2)}
-            ${tick("+" + horizonDays + "日", horizon, 98)}
+            ${tick(horizonDays === 7 ? "1週間後" : "1か月後", horizon, 98)}
             ${overflow("過去", pastItems, 2, "is-past")}
             ${overflow("他", futureItems, 98, "is-future")}
             ${overflow("日付不明", invalidItems, 50, "is-invalid")}
