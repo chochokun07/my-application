@@ -1043,6 +1043,24 @@
       </section>
     </div>
 
+    <div id="researchSolUnavailableModal" class="modal-backdrop" hidden>
+      <section class="research-modal research-bridge-modal" role="dialog" aria-modal="true" aria-labelledby="researchSolUnavailableTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">SOL ANALYSIS</p>
+            <h2 id="researchSolUnavailableTitle">Solに分析させる</h2>
+          </div>
+          <button class="icon-button close-button" type="button" data-research-bridge-close aria-label="閉じる">×</button>
+        </div>
+        <p class="research-bridge-help">分析対象のResearch Packetがまだありません。先にLunaで研究資料を整理してください。</p>
+        <div class="modal-actions">
+          <span class="action-spacer"></span>
+          <button class="secondary-button" type="button" data-research-bridge-close>閉じる</button>
+          <button id="researchSolCreatePacketButton" class="primary-button" type="button">Research Packetを作成（Luna）</button>
+        </div>
+      </section>
+    </div>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="./config.js"></script>
