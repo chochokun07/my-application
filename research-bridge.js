@@ -4,6 +4,7 @@
   const SETTINGS_KEY = "vectory.research-server-settings.v1";
   const PACKET_KEY = "vectory.latest-research-packet.v1";
   const SOL_DRAFT_KEY = "vectory.research-sol-draft.v1";
+  const SOL_INSTRUCTION_KEY = "vectory.research-sol-instruction.v1";
   const DEFAULT_SETTINGS = { serverUrl: "", token: "", projectUrl: "" };
   const state = {
     settings: readJson(SETTINGS_KEY, DEFAULT_SETTINGS),
@@ -454,7 +455,9 @@
     await navigator.clipboard.writeText(value);
   }
 
-  function buildSolPrompt(markdown) {
+  function buildSolPrompt(markdown, instruction = "") {
+    const personalInstruction = String(instruction || "").trim()
+      || "Research Packetをもとに、研究全体の目的に対する重要な論点、仮説、別の解釈、新しい研究方向を検討してください。";
     return [
       "あなたはSolです。以下のResearch Packetを根拠に、研究上の問題を探索的に検討してください。",
       "",
@@ -464,21 +467,25 @@
       "次に行うべき実験を挙げる場合も、確定事項ではなく検討候補として示してください。",
       "原因切り分けや再現性確認だけに議論を狭めず、研究全体を前進させる方向を優先してください。",
       "",
+      "## Solへの個別指示",
+      personalInstruction,
+      "",
       "## Research Packet（Lunaによる資料整理）",
       markdown,
       "",
-      "## Solへの依頼",
-      "上記を踏まえ、研究の方向性を広げる形で考察してください。"
+      "## 出力の扱い",
+      "事実・解釈・推論・提案を区別して回答してください。Packetにない事実は、推測として明示してください。"
     ].join("\n");
   }
-
   async function openSol() {
     const markdown = state.latestPacket?.markdown || elements.researchPacketOutput.value;
     if (!markdown) {
       openPacketModal();
       return;
     }
-    const solPrompt = buildSolPrompt(markdown);
+    const instruction = elements.researchSolInstruction.value.trim();
+    localStorage.setItem(SOL_INSTRUCTION_KEY, instruction);
+    const solPrompt = buildSolPrompt(markdown, instruction);
     const target = state.settings.projectUrl || "https://chatgpt.com/";
     const solWindow = window.open(target, "_blank");
     if (solWindow) solWindow.opener = null;
@@ -487,7 +494,7 @@
     } catch (_) {
       elements.researchPacketOutput?.select?.();
     }
-    setAdoptionStatus("Sol用の分析指示とResearch Packetをコピーし、Solの画面を開きました。");
+    setAdoptionStatus("Solへの分析指示とResearch Packetをコピーし、Solの画面を開きました。");
   }
   function saveSolDraft() {
     const response = elements.researchSolResponse.value.trim();
@@ -558,7 +565,7 @@
       "researchServerSettingsModal", "researchSummaryDetailModal", "researchSummaryDetailTitle", "researchSummaryDetailBody", "researchServerSettingsForm", "researchServerUrl", "researchServerToken",
       "researchProjectUrl", "researchFilesModal", "researchFilesPath", "researchFilesUpButton",
       "researchFilesReloadButton", "researchFilesList", "researchFilePreview", "researchFileSelectionCount",
-      "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSelectionInstruction", "researchPacketSources",
+      "researchPacketModal", "researchPacketForm", "researchPacketProblem", "researchPacketSelectionInstruction", "researchSolInstruction", "researchPacketSources",
       "researchPacketSubmit", "researchPacketResult", "researchPacketOutput", "researchPacketCopyButton",
       "researchPacketSolButton",
     ].forEach((id) => { elements[id] = $(id); });
@@ -580,6 +587,7 @@
       });
     });
     elements.researchSolResponse.value = localStorage.getItem(SOL_DRAFT_KEY) || "";
+    elements.researchSolInstruction.value = localStorage.getItem(SOL_INSTRUCTION_KEY) || "";
     if (state.latestPacket?.markdown) elements.researchPacketOutput.value = state.latestPacket.markdown;
 
     elements.researchServerSettingsButton.addEventListener("click", openSettings);
