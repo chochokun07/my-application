@@ -3,7 +3,12 @@
 
   const STORAGE_KEY = "my-application.tasks.v0.1";
   const NOTIFIED_REMINDERS_STORAGE_KEY = "my-application.notified-reminders.v0.1";
+  const WORK_EVENTS_STORAGE_KEY = "my-application.work-events.v0.1";
+  const WORK_WARNING_ACK_STORAGE_KEY = "my-application.work-warning-ack.v0.1";
+  const WORK_WARNING_NOTIFICATION_STORAGE_KEY = "my-application.work-warning-notifications.v0.1";
   const REMINDER_CHECK_INTERVAL_MS = 15000;
+  const WORK_CONTINUOUS_WARNING_MS = 2 * 60 * 60 * 1000;
+  const WORK_LONG_CONTINUOUS_WARNING_MS = 4 * 60 * 60 * 1000;
   const APP_SETTINGS_STORAGE_KEY = "my-application.app-settings.v0.1";
   const REMOTE_SETTINGS_KEY = "my_application_settings";
   const RESEARCH_PLANS_STORAGE_KEY = "my-application.research-plans.v0.1";
@@ -11,6 +16,7 @@
   const RESEARCH_SCHEDULE_HORIZON_STORAGE_KEY = "my-application.research-schedule-horizon.v0.1";
   const LOCAL_MODE_KEY = "my-application.local-mode";
   const TABLE_NAME = "tasks";
+  const WORK_EVENTS_TABLE = "work_events";
   const RESEARCH_PLANS_TABLE = "research_plans";
   const RESEARCH_SCHEDULES_TABLE = "research_schedules";
   const TASK_SELECT_FIELDS = "id, title, memo, research_report, status, due_date, priority, tags, is_research, research_plan_id, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
@@ -18,6 +24,8 @@
   const PLAN_SELECT_FIELDS = "id, title, objective, origin_facts, hypothesis, hypothesis_basis, status, target_date, next_action, notes, created_at, updated_at";
   const LEGACY_PLAN_SELECT_FIELDS = "id, title, objective, status, target_date, next_action, notes, created_at, updated_at";
   const SCHEDULE_SELECT_FIELDS = "id, title, scheduled_at, kind, plan_id, notes, created_at, updated_at";
+  const WORK_EVENT_SELECT_FIELDS = "id, user_id, event_type, occurred_at, created_at, activity_id, metadata";
+  const WORK_EVENT_TYPES = new Set(["start", "break_start", "break_end", "end"]);
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
   const CORE_PAGE_VIEWS = new Set(["home", "todo"]);
@@ -55,6 +63,11 @@
     mode: supabaseClient ? "remote" : "local",
     user: null,
     tasks: [],
+    workEvents: [],
+    workRemoteAvailable: true,
+    workEventsLoaded: false,
+    workTickTimer: null,
+    workActionInFlight: false,
     plans: [],
     schedules: [],
     view: "today",
@@ -131,6 +144,21 @@
     accountEmail: $("accountEmail"),
     signOutButton: $("signOutButton"),
     dateLabel: $("dateLabel"),
+    workTimerPanel: $("workTimerPanel"),
+    workTimerSyncStatus: $("workTimerSyncStatus"),
+    workTimerStateLabel: $("workTimerStateLabel"),
+    workTimerElapsed: $("workTimerElapsed"),
+    workTimerDetail: $("workTimerDetail"),
+    workStartButton: $("workStartButton"),
+    workBreakButton: $("workBreakButton"),
+    workResumeButton: $("workResumeButton"),
+    workEndButton: $("workEndButton"),
+    workTimerWarning: $("workTimerWarning"),
+    workTimerWarningTitle: $("workTimerWarningTitle"),
+    workTimerWarningText: $("workTimerWarningText"),
+    workCorrectEndButton: $("workCorrectEndButton"),
+    workContinueButton: $("workContinueButton"),
+    workAcknowledgeButton: $("workAcknowledgeButton"),
     homePageTitle: $("homePageTitle"),
     todaySubtitle: $("todaySubtitle"),
     taskAddButtonLabel: $("taskAddButtonLabel"),
@@ -258,6 +286,11 @@
     newTagName: $("newTagName"),
     addTagButton: $("addTagButton"),
     resetAppSettingsButton: $("resetAppSettingsButton"),
+    workCorrectionModal: $("workCorrectionModal"),
+    workCorrectionForm: $("workCorrectionForm"),
+    workCorrectionAt: $("workCorrectionAt"),
+    closeWorkCorrectionModal: $("closeWorkCorrectionModal"),
+    cancelWorkCorrectionButton: $("cancelWorkCorrectionButton"),
   };
 
   const STATUS_LABELS = {
@@ -516,6 +549,419 @@
     localStorage.setItem(RESEARCH_SCHEDULES_STORAGE_KEY, JSON.stringify(state.schedules));
   }
 
+  function getWorkStorageScope() {
+    return state.user?.id || "local";
+  }
+
+  function getWorkEventsStorageKey() {
+    return `${WORK_EVENTS_STORAGE_KEY}.${getWorkStorageScope()}`;
+  }
+
+  function getWorkWarningStorageKey(baseKey) {
+    return `${baseKey}.${getWorkStorageScope()}`;
+  }
+
+  function normalizeWorkEvent(event = {}) {
+    const eventType = String(event.event_type ?? event.eventType ?? "").trim();
+    if (!WORK_EVENT_TYPES.has(eventType)) return null;
+    const occurredDate = new Date(event.occurred_at ?? event.occurredAt ?? "");
+    if (Number.isNaN(occurredDate.getTime())) return null;
+    const createdDate = new Date(event.created_at ?? event.createdAt ?? occurredDate.toISOString());
+    return {
+      id: String(event.id || createId()),
+      eventType,
+      occurredAt: occurredDate.toISOString(),
+      createdAt: Number.isNaN(createdDate.getTime()) ? new Date().toISOString() : createdDate.toISOString(),
+      activityId: String(event.activity_id ?? event.activityId ?? "").trim() || null,
+      metadata: event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+        ? { ...event.metadata }
+        : {},
+    };
+  }
+
+  function sortWorkEvents(events) {
+    return events.filter(Boolean).sort((a, b) => {
+      const occurredDifference = new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime();
+      if (occurredDifference !== 0) return occurredDifference;
+      const createdDifference = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (createdDifference !== 0) return createdDifference;
+      return a.id.localeCompare(b.id);
+    });
+  }
+
+  function readLocalWorkEvents() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(getWorkEventsStorageKey()) || "[]");
+      return Array.isArray(saved) ? sortWorkEvents(saved.map(normalizeWorkEvent)) : [];
+    } catch (error) {
+      console.warn("ローカル作業記録の読み込みに失敗しました", error);
+      return [];
+    }
+  }
+
+  function writeLocalWorkEvents() {
+    try {
+      localStorage.setItem(getWorkEventsStorageKey(), JSON.stringify(sortWorkEvents(state.workEvents)));
+    } catch (error) {
+      console.warn("ローカル作業記録の保存に失敗しました", error);
+    }
+  }
+
+  function toWorkDatabasePayload(event) {
+    return {
+      user_id: state.user.id,
+      event_type: event.eventType,
+      occurred_at: event.occurredAt,
+      activity_id: event.activityId || null,
+      metadata: event.metadata || {},
+    };
+  }
+
+  function setWorkSyncStatus(label, status) {
+    if (!elements.workTimerSyncStatus) return;
+    elements.workTimerSyncStatus.textContent = label;
+    elements.workTimerSyncStatus.dataset.state = status;
+  }
+
+  function syncWorkStatusLabel() {
+    if (state.mode === "local") {
+      setWorkSyncStatus("この端末のみ", "local");
+    } else if (!state.workRemoteAvailable) {
+      setWorkSyncStatus("この端末に保存", "warning");
+    } else {
+      setWorkSyncStatus("Supabase同期", "synced");
+    }
+  }
+
+  function formatDuration(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+  }
+
+  function calculateWorkDuration(events, now = Date.now()) {
+    let workingStartedAt = null;
+    let total = 0;
+    sortWorkEvents(events).forEach((event) => {
+      const timestamp = new Date(event.occurredAt).getTime();
+      if (!Number.isFinite(timestamp)) return;
+      if (event.eventType === "start") {
+        if (workingStartedAt === null) workingStartedAt = timestamp;
+      } else if (event.eventType === "break_start") {
+        if (workingStartedAt !== null) total += Math.max(0, timestamp - workingStartedAt);
+        workingStartedAt = null;
+      } else if (event.eventType === "break_end") {
+        workingStartedAt = timestamp;
+      } else if (event.eventType === "end") {
+        if (workingStartedAt !== null) total += Math.max(0, timestamp - workingStartedAt);
+        workingStartedAt = null;
+      }
+    });
+    if (workingStartedAt !== null) total += Math.max(0, now - workingStartedAt);
+    return total;
+  }
+
+  function getWorkSnapshot(now = Date.now()) {
+    const events = sortWorkEvents([...state.workEvents]);
+    const lastEvent = events.length ? events[events.length - 1] : null;
+    let lastEndIndex = -1;
+    events.forEach((event, index) => {
+      if (event.eventType === "end") lastEndIndex = index;
+    });
+    const sessionEvents = events.slice(lastEndIndex + 1);
+    const sessionStartEvent = sessionEvents.find((event) => event.eventType === "start") || null;
+    const segmentStartEvent = [...sessionEvents].reverse().find((event) => ["start", "break_start", "break_end"].includes(event.eventType)) || null;
+    const status = lastEvent?.eventType === "start" || lastEvent?.eventType === "break_end"
+      ? "working"
+      : lastEvent?.eventType === "break_start"
+        ? "break"
+        : "idle";
+    const sessionStartAt = sessionStartEvent?.occurredAt || null;
+    const segmentStartAt = status === "idle" ? null : segmentStartEvent?.occurredAt || null;
+    const segmentStartMs = segmentStartAt ? new Date(segmentStartAt).getTime() : NaN;
+    return {
+      events,
+      lastEvent,
+      sessionEvents,
+      status,
+      sessionStartAt,
+      segmentStartAt,
+      elapsedMs: Number.isFinite(segmentStartMs) ? Math.max(0, now - segmentStartMs) : 0,
+      totalWorkMs: calculateWorkDuration(sessionEvents, now),
+    };
+  }
+
+  function getWorkWarningSnapshot(now = Date.now()) {
+    const snapshot = getWorkSnapshot(now);
+    if (snapshot.status === "idle" || !snapshot.sessionStartAt || !snapshot.segmentStartAt) return null;
+    const sessionStartMs = new Date(snapshot.sessionStartAt).getTime();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    let warning = null;
+
+    if (sessionStartMs < todayStart.getTime()) {
+      const stateLabel = snapshot.status === "break" ? "休憩" : "作業";
+      warning = {
+        kind: snapshot.status === "break" ? "overnight_break" : "overnight_work",
+        title: snapshot.status === "break" ? "休憩状態を確認してください" : "前日から作業中です",
+        text: `${formatDateTime(snapshot.sessionStartAt)}から${stateLabel}中のままです。終了時刻を修正するか、そのまま継続してください。`,
+        needsCorrection: true,
+      };
+    } else if (snapshot.status === "working" && snapshot.elapsedMs >= WORK_LONG_CONTINUOUS_WARNING_MS) {
+      warning = {
+        kind: "long_work",
+        title: "非常に長い連続作業です",
+        text: `${formatDuration(snapshot.elapsedMs)}連続で作業中です。現在も作業中か確認してください。`,
+        needsCorrection: false,
+      };
+    } else if (snapshot.status === "working" && snapshot.elapsedMs >= WORK_CONTINUOUS_WARNING_MS) {
+      warning = {
+        kind: "continuous_work",
+        title: "連続作業を確認してください",
+        text: `${formatDuration(snapshot.elapsedMs)}連続で作業中です。現在も作業中ですか？`,
+        needsCorrection: false,
+      };
+    }
+    if (!warning) return null;
+    return {
+      ...warning,
+      key: `${warning.kind}:${snapshot.sessionStartAt}:${snapshot.segmentStartAt}`,
+      snapshot,
+    };
+  }
+
+  function readWorkWarningKeys(storageKey) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(getWorkWarningStorageKey(storageKey)) || "[]");
+      return new Set(Array.isArray(saved) ? saved.filter((value) => typeof value === "string") : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function writeWorkWarningKeys(storageKey, keys) {
+    try {
+      localStorage.setItem(getWorkWarningStorageKey(storageKey), JSON.stringify([...keys].slice(-100)));
+    } catch (_) {
+      // 警告済み状態を保存できなくても、作業記録の保存は継続する。
+    }
+  }
+
+  function isWorkWarningAcknowledged(warning) {
+    return Boolean(warning && readWorkWarningKeys(WORK_WARNING_ACK_STORAGE_KEY).has(warning.key));
+  }
+
+  function acknowledgeWorkWarning(warning) {
+    if (!warning) return;
+    const keys = readWorkWarningKeys(WORK_WARNING_ACK_STORAGE_KEY);
+    keys.add(warning.key);
+    writeWorkWarningKeys(WORK_WARNING_ACK_STORAGE_KEY, keys);
+    renderWorkTimer();
+  }
+
+  function showWorkWarningNotification(warning) {
+    const NotificationApi = window.Notification;
+    if (!NotificationApi || NotificationApi.permission !== "granted") return false;
+    try {
+      const notification = new NotificationApi("作業時間の確認", {
+        body: warning.text,
+        icon: "./assets/icon-192.png",
+        tag: "work-warning-" + warning.key,
+      });
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+        if (state.sidebarView !== "home" && state.sidebarView !== "todo") navigateToPage("home");
+      };
+      return true;
+    } catch (error) {
+      console.warn("作業時間の警告通知の表示に失敗しました", error);
+      return false;
+    }
+  }
+
+  function checkWorkWarnings() {
+    if (!state.workEventsLoaded) return;
+    const warning = getWorkWarningSnapshot();
+    if (!warning || isWorkWarningAcknowledged(warning)) return;
+    const notifiedKeys = readWorkWarningKeys(WORK_WARNING_NOTIFICATION_STORAGE_KEY);
+    if (notifiedKeys.has(warning.key)) return;
+    if (showWorkWarningNotification(warning)) {
+      notifiedKeys.add(warning.key);
+      writeWorkWarningKeys(WORK_WARNING_NOTIFICATION_STORAGE_KEY, notifiedKeys);
+    }
+  }
+
+  function renderWorkTimer() {
+    if (!elements.workTimerPanel) return;
+    const snapshot = getWorkSnapshot();
+    const stateLabels = { idle: "未作業", working: "● 作業中", break: "休憩中" };
+    const stateLabel = stateLabels[snapshot.status] || stateLabels.idle;
+    elements.workTimerStateLabel.textContent = stateLabel;
+    elements.workTimerStateLabel.dataset.state = snapshot.status;
+    elements.workTimerElapsed.textContent = snapshot.status === "idle" ? "00:00:00" : formatDuration(snapshot.elapsedMs);
+    elements.workTimerDetail.textContent = snapshot.status === "idle"
+      ? snapshot.lastEvent?.eventType === "end"
+        ? `最終終了 ${formatDateTime(snapshot.lastEvent.occurredAt)}`
+        : "記録はまだありません。"
+      : `開始 ${formatDateTime(snapshot.sessionStartAt)} · 今回の実作業 ${formatDuration(snapshot.totalWorkMs)}`;
+    elements.workTimerPanel.dataset.state = snapshot.status;
+    elements.workStartButton.hidden = snapshot.status !== "idle";
+    elements.workBreakButton.hidden = snapshot.status !== "working";
+    elements.workResumeButton.hidden = snapshot.status !== "break";
+    elements.workEndButton.hidden = snapshot.status === "idle";
+    [elements.workStartButton, elements.workBreakButton, elements.workResumeButton, elements.workEndButton]
+      .forEach((button) => { if (button) button.disabled = state.workActionInFlight; });
+    syncWorkStatusLabel();
+
+    const warning = getWorkWarningSnapshot();
+    const showWarning = Boolean(warning && !isWorkWarningAcknowledged(warning));
+    elements.workTimerWarning.hidden = !showWarning;
+    if (showWarning) {
+      elements.workTimerWarningTitle.textContent = warning.title;
+      elements.workTimerWarningText.textContent = warning.text;
+      elements.workCorrectEndButton.hidden = !warning.needsCorrection;
+      elements.workContinueButton.hidden = !warning.needsCorrection;
+      elements.workAcknowledgeButton.hidden = warning.needsCorrection;
+    }
+  }
+
+  function isMissingWorkEventsTable(error) {
+    const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+    return message.includes("work_events") || message.includes("work events");
+  }
+
+  async function loadRemoteWorkEvents() {
+    const result = await supabaseClient
+      .from(WORK_EVENTS_TABLE)
+      .select(WORK_EVENT_SELECT_FIELDS)
+      .order("occurred_at", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (result.error) {
+      if (!isMissingWorkEventsTable(result.error)) console.warn("作業記録の同期読み込みに失敗しました", result.error);
+      state.workRemoteAvailable = false;
+      state.workEvents = readLocalWorkEvents();
+    } else {
+      state.workRemoteAvailable = true;
+      state.workEvents = sortWorkEvents((result.data || []).map(normalizeWorkEvent));
+    }
+    state.workEventsLoaded = true;
+    renderWorkTimer();
+    checkWorkWarnings();
+  }
+
+  async function appendWorkEvent(eventType, occurredAt = new Date().toISOString(), metadata = {}) {
+    if (!WORK_EVENT_TYPES.has(eventType)) throw new Error("不明な作業イベントです。");
+    const event = normalizeWorkEvent({ eventType, occurredAt, createdAt: new Date().toISOString(), metadata });
+    if (!event) throw new Error("作業イベントの時刻が正しくありません。");
+
+    if (state.mode === "remote" && state.workRemoteAvailable && state.user && supabaseClient) {
+      const result = await supabaseClient
+        .from(WORK_EVENTS_TABLE)
+        .insert(toWorkDatabasePayload(event))
+        .select(WORK_EVENT_SELECT_FIELDS)
+        .single();
+      if (result.error) {
+        if (!isMissingWorkEventsTable(result.error)) throw result.error;
+        state.workRemoteAvailable = false;
+      } else {
+        state.workEvents = sortWorkEvents([...state.workEvents, normalizeWorkEvent(result.data)]);
+        state.workEventsLoaded = true;
+        syncWorkStatusLabel();
+        return normalizeWorkEvent(result.data);
+      }
+    }
+
+    state.workEvents = sortWorkEvents([...state.workEvents, event]);
+    state.workEventsLoaded = true;
+    writeLocalWorkEvents();
+    syncWorkStatusLabel();
+    return event;
+  }
+
+  async function recordWorkAction(eventType) {
+    const snapshot = getWorkSnapshot();
+    const allowed = {
+      start: snapshot.status === "idle",
+      break_start: snapshot.status === "working",
+      break_end: snapshot.status === "break",
+      end: snapshot.status !== "idle",
+    };
+    if (!allowed[eventType] || state.workActionInFlight) return;
+    state.workActionInFlight = true;
+    renderWorkTimer();
+    try {
+      await appendWorkEvent(eventType);
+      const messages = { start: "作業を開始しました", break_start: "休憩を開始しました", break_end: "作業を再開しました", end: "作業を終了しました" };
+      render();
+      showToast(messages[eventType]);
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    } finally {
+      state.workActionInFlight = false;
+      renderWorkTimer();
+    }
+  }
+
+  function openWorkCorrectionModal() {
+    const snapshot = getWorkSnapshot();
+    if (snapshot.status === "idle") return;
+    const nowValue = toDateTimeLocalValue(new Date().toISOString());
+    elements.workCorrectionAt.value = nowValue;
+    elements.workCorrectionAt.max = nowValue;
+    elements.workCorrectionModal.hidden = false;
+    document.body.classList.add("modal-open");
+    window.setTimeout(() => elements.workCorrectionAt.focus(), 40);
+  }
+
+  function closeWorkCorrectionModal() {
+    elements.workCorrectionModal.hidden = true;
+    elements.workCorrectionForm.reset();
+    if (
+      elements.appSettingsMenu.hidden &&
+      elements.taskModal.hidden &&
+      elements.researchPlanModal.hidden &&
+      elements.researchScheduleModal.hidden &&
+      elements.researchPlanDetailModal.hidden &&
+      elements.researchTaskDetailModal.hidden
+    ) document.body.classList.remove("modal-open");
+  }
+
+  async function saveWorkCorrection(event) {
+    event.preventDefault();
+    if (!elements.workCorrectionForm.reportValidity()) return;
+    const snapshot = getWorkSnapshot();
+    if (snapshot.status === "idle") {
+      closeWorkCorrectionModal();
+      return;
+    }
+    const correctionDate = new Date(elements.workCorrectionAt.value);
+    const correctionMs = correctionDate.getTime();
+    const latestEventMs = snapshot.lastEvent ? new Date(snapshot.lastEvent.occurredAt).getTime() : NaN;
+    if (!Number.isFinite(correctionMs) || correctionMs > Date.now()) {
+      showToast("終了時刻は現在時刻以前にしてください。", true);
+      return;
+    }
+    if (!Number.isFinite(latestEventMs) || correctionMs <= latestEventMs) {
+      showToast("終了時刻は最後の作業イベントより後にしてください。", true);
+      return;
+    }
+    const saveButton = elements.workCorrectionForm.querySelector("button[type=submit]");
+    saveButton.disabled = true;
+    try {
+      await appendWorkEvent("end", correctionDate.toISOString(), { source: "manual_correction" });
+      closeWorkCorrectionModal();
+      render();
+      showToast("修正した終了時刻を記録しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    } finally {
+      saveButton.disabled = false;
+    }
+  }
+
   function setSyncStatus(label, status) {
     elements.syncStatus.textContent = label;
     elements.syncStatus.dataset.state = status;
@@ -630,11 +1076,21 @@
 
   function startReminderWatcher() {
     if (state.notificationTimer) return;
-    const check = () => checkTaskReminders();
+    const check = () => {
+      checkTaskReminders();
+      checkWorkWarnings();
+    };
     state.notificationTimer = window.setInterval(check, REMINDER_CHECK_INTERVAL_MS);
     document.addEventListener("visibilitychange", check);
     window.addEventListener("focus", check);
     check();
+  }
+
+  function startWorkTimerWatcher() {
+    if (state.workTickTimer) return;
+    state.workTickTimer = window.setInterval(renderWorkTimer, 1000);
+    document.addEventListener("visibilitychange", renderWorkTimer);
+    window.addEventListener("focus", renderWorkTimer);
   }
 
   function setAuthMessage(message = "", type = "") {
@@ -1589,6 +2045,7 @@
     applyAppSettings();
     renderActivityNavigation();
     renderCustomActivityPages();
+    renderWorkTimer();
 
     const openTasks = state.tasks.filter((task) => task.status !== "completed");
     const progressTasks = state.tasks.filter((task) => task.status === "in_progress");
@@ -1719,6 +2176,9 @@
       state.tasks = [];
       state.plans = [];
       state.schedules = [];
+      state.workEvents = [];
+      state.workEventsLoaded = false;
+      state.workRemoteAvailable = true;
       closeAppSettings();
       setSyncStatus("ログイン待ち", "local");
       showAuth();
@@ -1730,7 +2190,7 @@
     elements.accountInitial.textContent = (state.user.email || "M").slice(0, 1).toUpperCase();
     elements.accountEmail.textContent = state.user.email || "ログイン中";
     elements.accountButton.hidden = false;
-    await Promise.all([loadRemoteTasks(), loadRemoteResearchData()]);
+    await Promise.all([loadRemoteTasks(), loadRemoteResearchData(), loadRemoteWorkEvents()]);
     showApp();
   }
 
@@ -2320,6 +2780,7 @@
     const message = String(error?.message || error || "");
     if (message.includes("Invalid login credentials")) return "メールアドレスまたはパスワードが正しくありません。";
     if (message.includes("User already registered")) return "このメールアドレスはすでに登録されています。";
+    if (message.includes("work_events")) return "作業記録を同期できません。supabase/schema.sqlのwork_events定義を確認してください。";
     if (message.includes("research_plans") || message.includes("research_schedules") || message.includes("research_plan_id") || message.includes("is_research")) return researchSetupMessage();
     if (message.includes("relation") && message.includes("does not exist")) return "Supabaseにtasksテーブルがありません。READMEのSQLを実行してください。";
     if (message.includes("Failed to fetch")) return "通信に失敗しました。接続を確認してください。";
@@ -2334,6 +2795,9 @@
     state.tasks = readLocalTasks();
     state.plans = readLocalCollection(RESEARCH_PLANS_STORAGE_KEY, normalizePlan);
     state.schedules = readLocalCollection(RESEARCH_SCHEDULES_STORAGE_KEY, normalizeSchedule);
+    state.workEvents = readLocalWorkEvents();
+    state.workEventsLoaded = true;
+    state.workRemoteAvailable = true;
     state.researchRemoteAvailable = true;
     state.researchTaskSchemaAvailable = true;
     state.researchPlanSchemaAvailable = true;
@@ -2343,9 +2807,11 @@
     elements.openAuthButton.hidden = !supabaseClient;
     elements.setupNotice.hidden = false;
     setSyncStatus("この端末のみ", "local");
+    syncWorkStatusLabel();
     window.dispatchEvent(new CustomEvent("vectory:session-change", { detail: { signedIn: false } }));
     showApp();
     checkTaskReminders();
+    checkWorkWarnings();
   }
 
   function enterSyncMode() {
@@ -2441,6 +2907,19 @@
     elements.resetAppSettingsButton.addEventListener("click", resetAppSettings);
     window.addEventListener("hashchange", syncPageFromLocation);
     window.addEventListener("popstate", syncPageFromLocation);
+    elements.workStartButton.addEventListener("click", () => recordWorkAction("start"));
+    elements.workBreakButton.addEventListener("click", () => recordWorkAction("break_start"));
+    elements.workResumeButton.addEventListener("click", () => recordWorkAction("break_end"));
+    elements.workEndButton.addEventListener("click", () => recordWorkAction("end"));
+    elements.workCorrectEndButton.addEventListener("click", openWorkCorrectionModal);
+    elements.workContinueButton.addEventListener("click", () => acknowledgeWorkWarning(getWorkWarningSnapshot()));
+    elements.workAcknowledgeButton.addEventListener("click", () => acknowledgeWorkWarning(getWorkWarningSnapshot()));
+    elements.workCorrectionForm.addEventListener("submit", saveWorkCorrection);
+    elements.closeWorkCorrectionModal.addEventListener("click", closeWorkCorrectionModal);
+    elements.cancelWorkCorrectionButton.addEventListener("click", closeWorkCorrectionModal);
+    elements.workCorrectionModal.addEventListener("click", (event) => {
+      if (event.target === elements.workCorrectionModal) closeWorkCorrectionModal();
+    });
     elements.addTaskButton.addEventListener("click", () => openTaskModal());
     elements.emptyAddButton.addEventListener("click", () => openTaskModal());
     elements.addResearchPlanButton.addEventListener("click", () => openResearchPlanModal());
@@ -2545,6 +3024,7 @@
       const tag = document.activeElement?.tagName;
       const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
       if (event.key === "Escape" && !elements.appSettingsMenu.hidden) closeAppSettings();
+      else if (event.key === "Escape" && !elements.workCorrectionModal.hidden) closeWorkCorrectionModal();
       else if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
       else if (event.key === "Escape" && !elements.researchPlanModal.hidden) closeResearchPlanModal();
       else if (event.key === "Escape" && !elements.researchScheduleModal.hidden) closeResearchScheduleModal();
@@ -2564,6 +3044,7 @@
   async function boot() {
     bindEvents();
     startReminderWatcher();
+    startWorkTimerWatcher();
     updateAuthMode();
 
     if (!supabaseClient || localStorage.getItem(LOCAL_MODE_KEY) === "true") {

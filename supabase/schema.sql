@@ -155,6 +155,50 @@ create policy "Users can delete their own research schedules"
   on public.research_schedules for delete
   using (auth.uid() = user_id);
 
+-- 作業時間: 操作を合計値ではなくイベントとして保存
+create table if not exists public.work_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_type text not null
+    check (event_type in ('start', 'break_start', 'break_end', 'end')),
+  occurred_at timestamptz not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  activity_id text,
+  metadata jsonb not null default '{}'::jsonb
+);
+
+alter table public.work_events
+  add column if not exists activity_id text;
+
+alter table public.work_events
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
+create index if not exists work_events_user_occurred_at_idx
+  on public.work_events (user_id, occurred_at asc, created_at asc);
+
+alter table public.work_events enable row level security;
+
+drop policy if exists "Users can view their own work events" on public.work_events;
+create policy "Users can view their own work events"
+  on public.work_events for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can create their own work events" on public.work_events;
+create policy "Users can create their own work events"
+  on public.work_events for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update their own work events" on public.work_events;
+create policy "Users can update their own work events"
+  on public.work_events for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own work events" on public.work_events;
+create policy "Users can delete their own work events"
+  on public.work_events for delete
+  using (auth.uid() = user_id);
+
 create or replace function public.set_tasks_updated_at()
 returns trigger
 language plpgsql

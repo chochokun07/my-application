@@ -1074,6 +1074,171 @@ p {
   margin-bottom: 28px;
 }
 
+.work-timer-panel {
+  margin-bottom: 28px;
+  padding: 23px;
+  border: 1px solid rgba(31, 61, 56, 0.18);
+  border-radius: 20px;
+  background: rgba(255, 253, 248, 0.78);
+  box-shadow: var(--shadow);
+}
+
+.work-timer-heading,
+.work-timer-content,
+.work-timer-warning {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.work-timer-heading {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.work-timer-heading h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+}
+
+.work-timer-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.work-timer-sync-status {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.work-timer-sync-status[data-state="warning"] {
+  background: #fff3ce;
+  color: #806726;
+}
+
+.work-timer-sync-status[data-state="error"] {
+  background: #f8e1dd;
+  color: var(--red);
+}
+
+.work-timer-content {
+  align-items: center;
+  padding-top: 20px;
+}
+
+.work-timer-state {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.work-timer-state-label {
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.work-timer-state-label[data-state="break"] {
+  color: var(--orange);
+}
+
+.work-timer-state-label[data-state="idle"] {
+  color: var(--muted-dark);
+}
+
+.work-timer-elapsed {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(32px, 5vw, 47px);
+  font-weight: 400;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.work-timer-detail {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.work-timer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.work-timer-actions button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+  transform: none;
+}
+
+.work-end-button {
+  min-height: 43px;
+  padding: 0 16px;
+}
+
+.work-timer-warning {
+  align-items: center;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(217, 128, 85, 0.3);
+  border-radius: 13px;
+  background: #fff4ec;
+  color: #784a38;
+}
+
+.work-timer-warning strong {
+  display: block;
+  font-size: 12px;
+}
+
+.work-timer-warning p {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.work-timer-warning-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.work-timer-warning-actions .secondary-button {
+  min-height: 36px;
+  padding: 0 11px;
+  background: rgba(255, 253, 248, 0.78);
+  font-size: 11px;
+}
+
+.work-timer-warning-actions .text-button {
+  color: #784a38;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.work-correction-description {
+  margin: -8px 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .summary-card {
   position: relative;
   min-height: 132px;
@@ -2114,6 +2279,52 @@ select:hover {
   .summary-grid {
     gap: 8px;
     margin-bottom: 20px;
+  }
+
+  .work-timer-panel {
+    margin-bottom: 20px;
+    padding: 16px 12px;
+    border-radius: 17px;
+  }
+
+  .work-timer-heading,
+  .work-timer-content,
+  .work-timer-warning {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .work-timer-heading h2 {
+    font-size: 25px;
+  }
+
+  .work-timer-sync-status {
+    align-self: flex-start;
+  }
+
+  .work-timer-content {
+    padding-top: 17px;
+  }
+
+  .work-timer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .work-timer-actions .primary-button,
+  .work-timer-actions .secondary-button,
+  .work-timer-actions .work-end-button {
+    width: 100%;
+  }
+
+  .work-timer-warning-actions {
+    flex-wrap: wrap;
+  }
+
+  .work-timer-warning-actions .secondary-button {
+    flex: 1;
   }
 
   .summary-card {
