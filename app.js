@@ -161,12 +161,21 @@
     workLogTodayButton: $("workLogTodayButton"),
     workLogNextButton: $("workLogNextButton"),
     workLogRefreshButton: $("workLogRefreshButton"),
+    workLogCategorySummary: $("workLogCategorySummary"),
     closeWorkLogModal: $("closeWorkLogModal"),
     closeWorkLogModalButton: $("closeWorkLogModalButton"),
     workTimerSyncStatus: $("workTimerSyncStatus"),
     workTimerStateLabel: $("workTimerStateLabel"),
     workTimerElapsed: $("workTimerElapsed"),
     workTimerDetail: $("workTimerDetail"),
+    workTimerContext: $("workTimerContext"),
+    workContextModal: $("workContextModal"),
+    workContextForm: $("workContextForm"),
+    workContextTask: $("workContextTask"),
+    workContextCategory: $("workContextCategory"),
+    workContextMemo: $("workContextMemo"),
+    closeWorkContextModal: $("closeWorkContextModal"),
+    cancelWorkContextButton: $("cancelWorkContextButton"),
     workStartButton: $("workStartButton"),
     workBreakButton: $("workBreakButton"),
     workResumeButton: $("workResumeButton"),
@@ -597,6 +606,76 @@
     };
   }
 
+  function normalizeWorkContext(context = {}) {
+    const source = context && typeof context === "object" ? context : {};
+    const taskId = String(source.taskId ?? source.task_id ?? "").trim();
+    const taskTitle = String(source.taskTitle ?? source.task_title ?? "").trim().slice(0, 120);
+    const category = String(source.category ?? source.genre ?? "").trim().slice(0, 80);
+    const memo = String(source.memo ?? source.note ?? source.workMemo ?? "").trim().slice(0, 2000);
+    const activityId = String(source.activityId ?? source.activity_id ?? "").trim();
+    return {
+      taskId: taskId || null,
+      taskTitle: taskTitle || null,
+      category: category || null,
+      memo: memo || null,
+      activityId: activityId || null,
+    };
+  }
+
+  function getWorkContextFromEvent(event) {
+    const metadata = event?.metadata || {};
+    return normalizeWorkContext({
+      taskId: metadata.taskId ?? metadata.task_id,
+      taskTitle: metadata.taskTitle ?? metadata.task_title,
+      category: metadata.category ?? metadata.genre,
+      memo: metadata.memo ?? metadata.note ?? metadata.workMemo,
+      activityId: event?.activityId ?? metadata.activityId ?? metadata.activity_id,
+    });
+  }
+
+  function hasWorkContext(context) {
+    return Boolean(context?.taskId || context?.taskTitle || context?.category || context?.memo);
+  }
+
+  function workContextsMatch(left, right) {
+    const first = normalizeWorkContext(left);
+    const second = normalizeWorkContext(right);
+    return ["taskId", "taskTitle", "category", "memo", "activityId"]
+      .every((key) => first[key] === second[key]);
+  }
+
+  function getWorkContextMetadata(context, source = "button") {
+    const normalized = normalizeWorkContext(context);
+    const metadata = { source };
+    if (normalized.taskId) metadata.taskId = normalized.taskId;
+    if (normalized.taskTitle) metadata.taskTitle = normalized.taskTitle;
+    if (normalized.category) metadata.category = normalized.category;
+    if (normalized.memo) metadata.memo = normalized.memo;
+    return metadata;
+  }
+
+  function getWorkCategoryCandidates(task = null) {
+    const candidates = getTagCandidates();
+    normalizeTags(task?.tags).forEach((tag) => {
+      if (!candidates.some((candidate) => tagKey(candidate) === tagKey(tag))) candidates.push(tag);
+    });
+    return candidates;
+  }
+
+  function getDefaultWorkCategory(task) {
+    if (!task) return "";
+    const activity = (state.appSettings?.activities || []).find((item) => taskBelongsToActivity(task, item.id));
+    return activity ? getActivityTagLabel(activity.id) : normalizeTags(task.tags)[0] || "";
+  }
+
+  function getWorkActivityId(task, category) {
+    const activity = (state.appSettings?.activities || []).find((item) => {
+      const belongsToTask = task ? taskBelongsToActivity(task, item.id) : false;
+      return belongsToTask || tagKey(getActivityTagLabel(item.id)) === tagKey(category);
+    });
+    return activity?.id || null;
+  }
+
   function sortWorkEvents(events) {
     return events.filter(Boolean).sort((a, b) => {
       const occurredDifference = new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime();
@@ -711,6 +790,7 @@
     return {
       events,
       lastEvent,
+      sessionStartEvent,
       sessionEvents,
       status,
       sessionStartAt,
@@ -832,9 +912,18 @@
     elements.workTimerElapsed.textContent = snapshot.status === "idle" ? "00:00:00" : formatDuration(snapshot.elapsedMs);
     elements.workTimerDetail.textContent = snapshot.status === "idle"
       ? snapshot.lastEvent?.eventType === "end"
-        ? `最終終了 ${formatDateTime(snapshot.lastEvent.occurredAt)}`
+        ? "最終終了 " + formatDateTime(snapshot.lastEvent.occurredAt)
         : "記録はまだありません。"
-      : `開始 ${formatDateTime(snapshot.sessionStartAt)} · 今回の実作業 ${formatDuration(snapshot.totalWorkMs)}`;
+      : "開始 " + formatDateTime(snapshot.sessionStartAt) + " · 今回の実作業 " + formatDuration(snapshot.totalWorkMs);
+
+    const context = getWorkContextFromEvent(snapshot.sessionStartEvent);
+    const contextParts = [];
+    if (context.taskTitle) contextParts.push("タスク: " + context.taskTitle);
+    if (context.category) contextParts.push("ジャンル: " + context.category);
+    if (!contextParts.length && context.memo) contextParts.push("作業メモを記録済み");
+    elements.workTimerContext.hidden = contextParts.length === 0;
+    elements.workTimerContext.textContent = contextParts.join(" · ");
+
     elements.workTimerPanel.dataset.state = snapshot.status;
     elements.workStartButton.hidden = snapshot.status !== "idle";
     elements.workBreakButton.hidden = snapshot.status !== "working";
@@ -855,6 +944,7 @@
       elements.workAcknowledgeButton.hidden = warning.needsCorrection;
     }
   }
+
 
 
   const WORK_EVENT_LABELS = {
@@ -920,38 +1010,58 @@
 
   function buildWorkSegments(events, now = Date.now()) {
     let workingStartedAt = null;
+    let workingContext = null;
     let breakStartedAt = null;
+    let breakContext = null;
     const segments = [];
-    const addSegment = (kind, start, end) => {
+    const addSegment = (kind, start, end, context = {}) => {
       if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
-      segments.push({ kind, start, end });
+      segments.push({ kind, start, end, context: normalizeWorkContext(context) });
     };
 
     sortWorkEvents(events).forEach((event) => {
       const timestamp = new Date(event.occurredAt).getTime();
       if (!Number.isFinite(timestamp)) return;
+      const eventContext = getWorkContextFromEvent(event);
+      const hasEventContext = hasWorkContext(eventContext);
+
       if (event.eventType === "start") {
-        if (workingStartedAt === null && breakStartedAt === null) workingStartedAt = timestamp;
+        if (workingStartedAt === null && breakStartedAt === null) {
+          workingStartedAt = timestamp;
+          workingContext = eventContext;
+        }
       } else if (event.eventType === "break_start") {
-        if (workingStartedAt !== null) addSegment("work", workingStartedAt, timestamp);
+        if (workingStartedAt !== null) addSegment("work", workingStartedAt, timestamp, workingContext);
+        const nextContext = hasEventContext ? eventContext : (workingContext || breakContext || {});
         workingStartedAt = null;
-        if (breakStartedAt === null) breakStartedAt = timestamp;
+        workingContext = null;
+        if (breakStartedAt === null) {
+          breakStartedAt = timestamp;
+          breakContext = nextContext;
+        }
       } else if (event.eventType === "break_end") {
-        if (breakStartedAt !== null) addSegment("break", breakStartedAt, timestamp);
+        if (breakStartedAt !== null) addSegment("break", breakStartedAt, timestamp, breakContext);
+        const nextContext = hasEventContext ? eventContext : (breakContext || workingContext || {});
         breakStartedAt = null;
+        breakContext = null;
         workingStartedAt = timestamp;
+        workingContext = nextContext;
       } else if (event.eventType === "end") {
-        if (workingStartedAt !== null) addSegment("work", workingStartedAt, timestamp);
-        if (breakStartedAt !== null) addSegment("break", breakStartedAt, timestamp);
+        const endContext = hasEventContext ? eventContext : (workingContext || breakContext || {});
+        if (workingStartedAt !== null) addSegment("work", workingStartedAt, timestamp, workingContext || endContext);
+        if (breakStartedAt !== null) addSegment("break", breakStartedAt, timestamp, breakContext || endContext);
         workingStartedAt = null;
+        workingContext = null;
         breakStartedAt = null;
+        breakContext = null;
       }
     });
 
-    if (workingStartedAt !== null) addSegment("work", workingStartedAt, now);
-    if (breakStartedAt !== null) addSegment("break", breakStartedAt, now);
+    if (workingStartedAt !== null) addSegment("work", workingStartedAt, now, workingContext);
+    if (breakStartedAt !== null) addSegment("break", breakStartedAt, now, breakContext);
     return segments;
   }
+
 
   function clipWorkSegmentsToDay(segments, day) {
     const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
@@ -1006,6 +1116,29 @@
     return "記録時不明";
   }
 
+  function renderWorkLogCategorySummary(segments, rangeStart, rangeEnd) {
+    if (!elements.workLogCategorySummary) return;
+    const totals = new Map();
+    segments.filter((segment) => segment.kind === "work").forEach((segment) => {
+      const start = Math.max(segment.start, rangeStart);
+      const end = Math.min(segment.end, rangeEnd);
+      if (end <= start) return;
+      const label = segment.context?.category || "未分類";
+      totals.set(label, (totals.get(label) || 0) + end - start);
+    });
+    const entries = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+    if (!entries.length) {
+      elements.workLogCategorySummary.innerHTML = '<span class="work-log-category-empty">ジャンル別の記録はありません。</span>';
+      return;
+    }
+    elements.workLogCategorySummary.innerHTML =
+      '<span class="work-log-category-summary-label">ジャンル別</span>' +
+      entries.map(([label, milliseconds]) =>
+        '<span class="work-log-category-chip"><strong>' + escapeHtml(label) + '</strong> ' +
+        escapeHtml(formatWorkDurationShort(milliseconds)) + '</span>'
+      ).join("");
+  }
+
   function renderWorkLog() {
     if (!elements.workLogModal || elements.workLogModal.hidden) return;
     const selectedDate = state.workLogDate || todayKey();
@@ -1035,6 +1168,7 @@
     elements.workLogEventCount.textContent = String(weekEvents.length);
     elements.workLogSource.textContent = getWorkSourceLabel();
     elements.workLogSource.dataset.state = state.mode === "remote" && state.workRemoteAvailable ? "synced" : "local";
+    renderWorkLogCategorySummary(segments, weekStartMs, weekEndMs);
     elements.workLogSelectedDateLabel.textContent = formatWorkLogLongDate(parseWorkDateKey(selectedDate));
 
     const timeAxis = '<div class="work-log-time-axis" aria-hidden="true">' + hourLabels + '</div>';
@@ -1046,8 +1180,17 @@
       const blocks = daySegments.map((segment) => {
         const top = ((segment.start - day.getTime()) / (24 * 60 * 60 * 1000)) * 100;
         const height = Math.max(1.4, ((segment.end - segment.start) / (24 * 60 * 60 * 1000)) * 100);
-        const label = segment.kind === "work" ? "作業" : "休憩";
-        const title = label + " " + formatWorkClock(segment.start) + "–" + formatWorkClock(segment.end);
+        const taskTitle = segment.context?.taskTitle || "";
+        const category = segment.context?.category || "";
+        const label = taskTitle || category || (segment.kind === "work" ? "作業" : "休憩");
+        const contextTitle = [
+          taskTitle,
+          category ? "ジャンル: " + category : "",
+          segment.context?.memo ? "メモ: " + segment.context.memo : "",
+        ].filter(Boolean).join(" · ");
+        const title = [label + " " + formatWorkClock(segment.start) + "–" + formatWorkClock(segment.end), contextTitle]
+          .filter(Boolean)
+          .join(" · ");
         return '<span class="work-log-block work-log-block-' + segment.kind + '" style="top:' + top + '%;height:' + height + '%" title="' + escapeHtml(title) + '">' + escapeHtml(label) + '</span>';
       }).join("");
       const selectedClass = key === selectedDate ? " is-selected" : "";
@@ -1070,7 +1213,7 @@
       elements.workLogEvents.innerHTML = '<li class="work-log-empty">この日のイベントはありません。</li>';
       return;
     }
-    elements.workLogEvents.innerHTML = selectedEvents.map((event) => {
+    elements.workLogEvents.innerHTML = selectedEvents.map((event, index) => {
       const occurredDate = new Date(event.occurredAt);
       const createdDate = new Date(event.createdAt);
       const createdText = Number.isFinite(createdDate.getTime()) &&
@@ -1079,11 +1222,27 @@
         : "";
       const anomaly = anomalyMap.get(event.id);
       const anomalyText = anomaly ? '<span class="work-log-event-warning">' + escapeHtml(anomaly) + '</span>' : "";
+      const context = getWorkContextFromEvent(event);
+      const contextParts = [];
+      if (context.taskTitle) contextParts.push('<span class="work-log-context-task">タスク: ' + escapeHtml(context.taskTitle) + '</span>');
+      if (context.category) contextParts.push('<span class="work-log-context-category">ジャンル: ' + escapeHtml(context.category) + '</span>');
+      if (context.memo) contextParts.push('<span class="work-log-context-memo">メモ: ' + escapeHtml(context.memo) + '</span>');
+      const previousEvent = index > 0 ? selectedEvents[index - 1] : null;
+      const showContext = contextParts.length > 0 &&
+        (!previousEvent || !workContextsMatch(context, getWorkContextFromEvent(previousEvent)));
+      const contextHtml = showContext
+        ? '<div class="work-log-event-context">' + contextParts.join("") + '</div>'
+        : "";
       return '<li class="work-log-event-item work-log-event-' + escapeHtml(event.eventType) + '">' +
         '<time datetime="' + escapeHtml(event.occurredAt) + '">' + escapeHtml(formatDateTime(event.occurredAt)) + '</time>' +
-        '<strong>' + escapeHtml(WORK_EVENT_LABELS[event.eventType] || event.eventType) + '</strong>' +
-        '<span class="work-log-event-source">' + escapeHtml(getWorkEventSourceLabel(event)) + '</span>' +
-        anomalyText + createdText +
+        '<div class="work-log-event-content">' +
+          '<div class="work-log-event-line">' +
+            '<strong>' + escapeHtml(WORK_EVENT_LABELS[event.eventType] || event.eventType) + '</strong>' +
+            '<span class="work-log-event-source">' + escapeHtml(getWorkEventSourceLabel(event)) + '</span>' +
+            anomalyText + createdText +
+          '</div>' +
+          contextHtml +
+        '</div>' +
       '</li>';
     }).join("");
   }
@@ -1104,7 +1263,8 @@
       elements.researchScheduleModal.hidden &&
       elements.researchPlanDetailModal.hidden &&
       elements.researchTaskDetailModal.hidden &&
-      elements.workCorrectionModal.hidden
+      elements.workCorrectionModal.hidden &&
+      elements.workContextModal.hidden
     ) document.body.classList.remove("modal-open");
   }
 
@@ -1172,9 +1332,15 @@
     checkWorkWarnings();
   }
 
-  async function appendWorkEvent(eventType, occurredAt = new Date().toISOString(), metadata = {}) {
+  async function appendWorkEvent(eventType, occurredAt = new Date().toISOString(), metadata = {}, activityId = null) {
     if (!WORK_EVENT_TYPES.has(eventType)) throw new Error("不明な作業イベントです。");
-    const event = normalizeWorkEvent({ eventType, occurredAt, createdAt: new Date().toISOString(), metadata });
+    const event = normalizeWorkEvent({
+      eventType,
+      occurredAt,
+      createdAt: new Date().toISOString(),
+      activityId: activityId || metadata?.activityId || metadata?.activity_id || null,
+      metadata,
+    });
     if (!event) throw new Error("作業イベントの時刻が正しくありません。");
 
     if (state.mode === "remote" && state.workRemoteAvailable && state.user && supabaseClient) {
@@ -1203,6 +1369,93 @@
     return savedEvent;
   }
 
+  function renderWorkContextTaskOptions(selectedId = "") {
+    const tasks = state.tasks
+      .filter((task) => task.title)
+      .sort((a, b) => {
+        const completedDifference = Number(a.status === "completed") - Number(b.status === "completed");
+        if (completedDifference !== 0) return completedDifference;
+        const priorityDifference = (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1);
+        if (priorityDifference !== 0) return priorityDifference;
+        return a.title.localeCompare(b.title, "ja");
+      });
+    elements.workContextTask.innerHTML =
+      '<option value="">タスクを選択しない</option>' +
+      tasks.map((task) => {
+        const tags = normalizeTags(task.tags);
+        const suffix = tags.length ? " [" + tags.join("・") + "]" : "";
+        return '<option value="' + escapeHtml(String(task.id)) + '">' +
+          escapeHtml(task.title + suffix) + '</option>';
+      }).join("");
+    elements.workContextTask.value = tasks.some((task) => String(task.id) === String(selectedId)) ? String(selectedId) : "";
+  }
+
+  function renderWorkContextCategoryOptions(task = null, selectedCategory = "") {
+    const candidates = getWorkCategoryCandidates(task);
+    if (selectedCategory && !candidates.some((candidate) => tagKey(candidate) === tagKey(selectedCategory))) {
+      candidates.unshift(selectedCategory);
+    }
+    elements.workContextCategory.innerHTML =
+      '<option value="">未分類</option>' +
+      candidates.map((category) =>
+        '<option value="' + escapeHtml(category) + '">' + escapeHtml(category) + '</option>'
+      ).join("");
+    elements.workContextCategory.value = selectedCategory || "";
+  }
+
+  function handleWorkContextTaskChange() {
+    const task = state.tasks.find((item) => String(item.id) === String(elements.workContextTask.value));
+    renderWorkContextCategoryOptions(task, getDefaultWorkCategory(task));
+  }
+
+  function openWorkContextModal() {
+    if (state.workActionInFlight || getWorkSnapshot().status !== "idle") return;
+    elements.workContextForm.reset();
+    renderWorkContextTaskOptions();
+    renderWorkContextCategoryOptions();
+    elements.workContextMemo.value = "";
+    elements.workContextModal.hidden = false;
+    document.body.classList.add("modal-open");
+    window.setTimeout(() => elements.workContextTask.focus(), 40);
+  }
+
+  function closeWorkContextModal() {
+    elements.workContextModal.hidden = true;
+    elements.workContextForm.reset();
+    document.body.classList.remove("modal-open");
+  }
+
+  async function saveWorkContext(event) {
+    event.preventDefault();
+    if (!elements.workContextForm.reportValidity() || state.workActionInFlight) return;
+    const task = state.tasks.find((item) => String(item.id) === String(elements.workContextTask.value));
+    const category = elements.workContextCategory.value.trim();
+    const memo = elements.workContextMemo.value.trim();
+    const context = {
+      taskId: task?.id || null,
+      taskTitle: task?.title || null,
+      category: category || null,
+      memo: memo || null,
+      activityId: getWorkActivityId(task, category),
+    };
+    const saveButton = elements.workContextForm.querySelector('button[type="submit"]');
+    state.workActionInFlight = true;
+    if (saveButton) saveButton.disabled = true;
+    renderWorkTimer();
+    try {
+      await appendWorkEvent("start", undefined, getWorkContextMetadata(context, "button"), context.activityId);
+      closeWorkContextModal();
+      render();
+      showToast("作業を開始しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    } finally {
+      state.workActionInFlight = false;
+      if (saveButton) saveButton.disabled = false;
+      renderWorkTimer();
+    }
+  }
+
   async function recordWorkAction(eventType) {
     const snapshot = getWorkSnapshot();
     const allowed = {
@@ -1212,10 +1465,21 @@
       end: snapshot.status !== "idle",
     };
     if (!allowed[eventType] || state.workActionInFlight) return;
+    if (eventType === "start") {
+      openWorkContextModal();
+      return;
+    }
+
     state.workActionInFlight = true;
     renderWorkTimer();
     try {
-      await appendWorkEvent(eventType, undefined, { source: "button" });
+      const context = getWorkContextFromEvent(snapshot.sessionStartEvent);
+      await appendWorkEvent(
+        eventType,
+        undefined,
+        getWorkContextMetadata(context, "button"),
+        context.activityId
+      );
       const messages = { start: "作業を開始しました", break_start: "休憩を開始しました", break_end: "作業を再開しました", end: "作業を終了しました" };
       render();
       showToast(messages[eventType]);
@@ -1226,6 +1490,7 @@
       renderWorkTimer();
     }
   }
+
 
   function openWorkCorrectionModal() {
     const snapshot = getWorkSnapshot();
@@ -1248,7 +1513,8 @@
       elements.researchScheduleModal.hidden &&
       elements.researchPlanDetailModal.hidden &&
       elements.researchTaskDetailModal.hidden &&
-      (!elements.workLogModal || elements.workLogModal.hidden)
+      (!elements.workLogModal || elements.workLogModal.hidden) &&
+      elements.workContextModal.hidden
     ) document.body.classList.remove("modal-open");
   }
 
@@ -1274,7 +1540,13 @@
     const saveButton = elements.workCorrectionForm.querySelector("button[type=submit]");
     saveButton.disabled = true;
     try {
-      await appendWorkEvent("end", correctionDate.toISOString(), { source: "manual_correction" });
+      const context = getWorkContextFromEvent(snapshot.sessionStartEvent);
+      await appendWorkEvent(
+        "end",
+        correctionDate.toISOString(),
+        getWorkContextMetadata(context, "manual_correction"),
+        context.activityId
+      );
       closeWorkCorrectionModal();
       render();
       showToast("修正した終了時刻を記録しました");
@@ -3250,6 +3522,13 @@
     elements.workCorrectEndButton.addEventListener("click", openWorkCorrectionModal);
     elements.workContinueButton.addEventListener("click", () => acknowledgeWorkWarning(getWorkWarningSnapshot()));
     elements.workAcknowledgeButton.addEventListener("click", () => acknowledgeWorkWarning(getWorkWarningSnapshot()));
+    elements.workContextForm.addEventListener("submit", saveWorkContext);
+    elements.workContextTask.addEventListener("change", handleWorkContextTaskChange);
+    elements.closeWorkContextModal.addEventListener("click", closeWorkContextModal);
+    elements.cancelWorkContextButton.addEventListener("click", closeWorkContextModal);
+    elements.workContextModal.addEventListener("click", (event) => {
+      if (event.target === elements.workContextModal) closeWorkContextModal();
+    });
     elements.workCorrectionForm.addEventListener("submit", saveWorkCorrection);
     elements.closeWorkCorrectionModal.addEventListener("click", closeWorkCorrectionModal);
     elements.cancelWorkCorrectionButton.addEventListener("click", closeWorkCorrectionModal);
@@ -3370,6 +3649,7 @@
       const tag = document.activeElement?.tagName;
       const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
       if (event.key === "Escape" && !elements.appSettingsMenu.hidden) closeAppSettings();
+      else if (event.key === "Escape" && !elements.workContextModal.hidden) closeWorkContextModal();
       else if (event.key === "Escape" && !elements.workCorrectionModal.hidden) closeWorkCorrectionModal();
       else if (event.key === "Escape" && !elements.workLogModal.hidden) closeWorkLogModal();
       else if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
