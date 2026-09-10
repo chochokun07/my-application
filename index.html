@@ -120,7 +120,10 @@
               <h2 id="workTimerTitle">作業時間</h2>
               <p class="work-timer-subtitle">開始・休憩・終了の操作をイベントとして記録します。</p>
             </div>
-            <span id="workTimerSyncStatus" class="work-timer-sync-status">この端末のみ</span>
+            <div class="work-timer-tools">
+              <span id="workTimerSyncStatus" class="work-timer-sync-status">この端末のみ</span>
+              <button id="openWorkLogButton" class="text-button work-log-open-button" type="button">記録を見る</button>
+            </div>
           </div>
 
           <div class="work-timer-content">
@@ -715,6 +718,62 @@
             <button class="primary-button" type="submit">終了として記録</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div id="workLogModal" class="modal-backdrop" hidden>
+      <section class="research-modal work-log-modal" role="dialog" aria-modal="true" aria-labelledby="workLogTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">WORK LOG</p>
+            <h2 id="workLogTitle">作業記録</h2>
+            <p class="work-log-description">保存されたイベントから、実作業時間と日ごとのタイムラインを表示します。</p>
+          </div>
+          <button id="closeWorkLogModal" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+
+        <div class="work-log-toolbar">
+          <div class="work-log-navigation">
+            <button id="workLogPreviousButton" class="icon-button" type="button" aria-label="前の週">‹</button>
+            <button id="workLogTodayButton" class="secondary-button" type="button">今週</button>
+            <strong id="workLogWeekLabel"></strong>
+            <button id="workLogNextButton" class="icon-button" type="button" aria-label="次の週">›</button>
+          </div>
+          <button id="workLogRefreshButton" class="secondary-button" type="button">再読込</button>
+        </div>
+
+        <div class="work-log-summary" aria-label="作業記録の概要">
+          <div>
+            <span>週の実作業</span>
+            <strong id="workLogWeekTotal">00:00:00</strong>
+          </div>
+          <div>
+            <span>イベント数</span>
+            <strong id="workLogEventCount">0</strong>
+          </div>
+          <div>
+            <span>保存先</span>
+            <strong id="workLogSource">この端末</strong>
+          </div>
+        </div>
+
+        <div class="work-log-calendar-wrap">
+          <div id="workLogCalendar" class="work-log-calendar" aria-label="週の作業タイムライン"></div>
+        </div>
+
+        <div class="work-log-event-heading">
+          <div>
+            <p class="section-kicker">EVENT AUDIT</p>
+            <h3><span id="workLogSelectedDateLabel"></span>のイベント</h3>
+          </div>
+          <p>時刻は発生時刻です。登録時刻が異なる場合は併記します。</p>
+        </div>
+        <ol id="workLogEvents" class="work-log-events"></ol>
+
+        <div class="modal-actions">
+          <span class="action-spacer"></span>
+          <button id="closeWorkLogModalButton" class="secondary-button" type="button">閉じる</button>
+        </div>
       </section>
     </div>
 

@@ -68,6 +68,9 @@
     workEventsLoaded: false,
     workTickTimer: null,
     workActionInFlight: false,
+    workEventsLoadSequence: 0,
+    workEventsRevision: 0,
+    workLogDate: todayKey(),
     plans: [],
     schedules: [],
     view: "today",
@@ -145,6 +148,21 @@
     signOutButton: $("signOutButton"),
     dateLabel: $("dateLabel"),
     workTimerPanel: $("workTimerPanel"),
+    workLogModal: $("workLogModal"),
+    openWorkLogButton: $("openWorkLogButton"),
+    workLogWeekLabel: $("workLogWeekLabel"),
+    workLogWeekTotal: $("workLogWeekTotal"),
+    workLogEventCount: $("workLogEventCount"),
+    workLogSource: $("workLogSource"),
+    workLogSelectedDateLabel: $("workLogSelectedDateLabel"),
+    workLogCalendar: $("workLogCalendar"),
+    workLogEvents: $("workLogEvents"),
+    workLogPreviousButton: $("workLogPreviousButton"),
+    workLogTodayButton: $("workLogTodayButton"),
+    workLogNextButton: $("workLogNextButton"),
+    workLogRefreshButton: $("workLogRefreshButton"),
+    closeWorkLogModal: $("closeWorkLogModal"),
+    closeWorkLogModalButton: $("closeWorkLogModalButton"),
     workTimerSyncStatus: $("workTimerSyncStatus"),
     workTimerStateLabel: $("workTimerStateLabel"),
     workTimerElapsed: $("workTimerElapsed"),
@@ -607,6 +625,14 @@
     }
   }
 
+  function upsertWorkEvent(event) {
+    const normalized = normalizeWorkEvent(event);
+    if (!normalized) return null;
+    state.workEvents = sortWorkEvents([...state.workEvents.filter((item) => item.id !== normalized.id), normalized]);
+    state.workEventsRevision += 1;
+    return normalized;
+  }
+
   function toWorkDatabasePayload(event) {
     return {
       user_id: state.user.id,
@@ -673,9 +699,10 @@
     const sessionEvents = events.slice(lastEndIndex + 1);
     const sessionStartEvent = sessionEvents.find((event) => event.eventType === "start") || null;
     const segmentStartEvent = [...sessionEvents].reverse().find((event) => ["start", "break_start", "break_end"].includes(event.eventType)) || null;
-    const status = lastEvent?.eventType === "start" || lastEvent?.eventType === "break_end"
+    const sessionLastEvent = sessionEvents.length ? sessionEvents[sessionEvents.length - 1] : null;
+    const status = sessionLastEvent?.eventType === "start" || sessionLastEvent?.eventType === "break_end"
       ? "working"
-      : lastEvent?.eventType === "break_start"
+      : sessionLastEvent?.eventType === "break_start"
         ? "break"
         : "idle";
     const sessionStartAt = sessionStartEvent?.occurredAt || null;
@@ -689,6 +716,7 @@
       sessionStartAt,
       segmentStartAt,
       elapsedMs: Number.isFinite(segmentStartMs) ? Math.max(0, now - segmentStartMs) : 0,
+      sessionLastEvent,
       totalWorkMs: calculateWorkDuration(sessionEvents, now),
     };
   }
@@ -828,17 +856,307 @@
     }
   }
 
+
+  const WORK_EVENT_LABELS = {
+    start: "作業開始",
+    break_start: "休憩開始",
+    break_end: "作業再開",
+    end: "作業終了",
+  };
+
+  function getWorkDateKey(value) {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return date.getFullYear() + "-" + month + "-" + day;
+  }
+
+  function parseWorkDateKey(value) {
+    const parts = String(value || "").split("-").map(Number);
+    if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return new Date();
+    return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0);
+  }
+
+  function getWorkWeekStart(value) {
+    const date = parseWorkDateKey(value);
+    const dayFromMonday = (date.getDay() + 6) % 7;
+    date.setDate(date.getDate() - dayFromMonday);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  function formatWorkWeekLabel(start) {
+    const end = new Date(start.getTime());
+    end.setDate(end.getDate() + 6);
+    const formatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" });
+    const yearFormatter = new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "numeric", day: "numeric" });
+    if (start.getFullYear() === end.getFullYear()) return formatter.format(start) + " — " + formatter.format(end);
+    return yearFormatter.format(start) + " — " + yearFormatter.format(end);
+  }
+
+  function formatWorkLogLongDate(value) {
+    return new Intl.DateTimeFormat("ja-JP", {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      weekday: "short",
+    }).format(value);
+  }
+
+  function formatWorkClock(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("ja-JP", { hour: "numeric", minute: "2-digit" }).format(date);
+  }
+
+  function formatWorkDurationShort(milliseconds) {
+    const totalMinutes = Math.round(Math.max(0, Number(milliseconds || 0)) / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours) return hours + "h" + (minutes ? String(minutes).padStart(2, "0") + "m" : "");
+    return minutes + "m";
+  }
+
+  function buildWorkSegments(events, now = Date.now()) {
+    let workingStartedAt = null;
+    let breakStartedAt = null;
+    const segments = [];
+    const addSegment = (kind, start, end) => {
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
+      segments.push({ kind, start, end });
+    };
+
+    sortWorkEvents(events).forEach((event) => {
+      const timestamp = new Date(event.occurredAt).getTime();
+      if (!Number.isFinite(timestamp)) return;
+      if (event.eventType === "start") {
+        if (workingStartedAt === null && breakStartedAt === null) workingStartedAt = timestamp;
+      } else if (event.eventType === "break_start") {
+        if (workingStartedAt !== null) addSegment("work", workingStartedAt, timestamp);
+        workingStartedAt = null;
+        if (breakStartedAt === null) breakStartedAt = timestamp;
+      } else if (event.eventType === "break_end") {
+        if (breakStartedAt !== null) addSegment("break", breakStartedAt, timestamp);
+        breakStartedAt = null;
+        workingStartedAt = timestamp;
+      } else if (event.eventType === "end") {
+        if (workingStartedAt !== null) addSegment("work", workingStartedAt, timestamp);
+        if (breakStartedAt !== null) addSegment("break", breakStartedAt, timestamp);
+        workingStartedAt = null;
+        breakStartedAt = null;
+      }
+    });
+
+    if (workingStartedAt !== null) addSegment("work", workingStartedAt, now);
+    if (breakStartedAt !== null) addSegment("break", breakStartedAt, now);
+    return segments;
+  }
+
+  function clipWorkSegmentsToDay(segments, day) {
+    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+    return segments.map((segment) => ({
+      ...segment,
+      start: Math.max(segment.start, dayStart),
+      end: Math.min(segment.end, dayEnd),
+    })).filter((segment) => segment.end > segment.start);
+  }
+
+  function getWorkRangeDuration(segments, rangeStart, rangeEnd, kind = "work") {
+    return segments.filter((segment) => segment.kind === kind).reduce((total, segment) => {
+      const start = Math.max(segment.start, rangeStart);
+      const end = Math.min(segment.end, rangeEnd);
+      return total + (end > start ? end - start : 0);
+    }, 0);
+  }
+
+  function getWorkEventAnomalyMap(events) {
+    const anomalies = new Map();
+    let currentState = "idle";
+    sortWorkEvents(events).forEach((event) => {
+      let message = "";
+      if (event.eventType === "start") {
+        if (currentState !== "idle") message = "作業中に再度開始";
+        currentState = "working";
+      } else if (event.eventType === "break_start") {
+        if (currentState !== "working") message = "作業中以外で休憩開始";
+        currentState = "break";
+      } else if (event.eventType === "break_end") {
+        if (currentState !== "break") message = "休憩中以外で作業再開";
+        currentState = "working";
+      } else if (event.eventType === "end") {
+        if (currentState === "idle") message = "作業中以外で終了";
+        currentState = "idle";
+      }
+      if (message) anomalies.set(event.id, message);
+    });
+    return anomalies;
+  }
+
+  function getWorkSourceLabel() {
+    if (state.mode === "local") return "この端末";
+    return state.workRemoteAvailable ? "Supabase" : "端末フォールバック";
+  }
+
+  function getWorkEventSourceLabel(event) {
+    const source = event.metadata?.source;
+    if (source === "button") return "操作";
+    if (source === "manual_correction") return "手動修正";
+    return "記録時不明";
+  }
+
+  function renderWorkLog() {
+    if (!elements.workLogModal || elements.workLogModal.hidden) return;
+    const selectedDate = state.workLogDate || todayKey();
+    const weekStart = getWorkWeekStart(selectedDate);
+    const weekStartMs = weekStart.getTime();
+    const weekEndMs = weekStartMs + 7 * 24 * 60 * 60 * 1000;
+    const days = Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(weekStart.getTime());
+      day.setDate(day.getDate() + index);
+      return day;
+    });
+    const segments = buildWorkSegments(state.workEvents);
+    const weekEvents = state.workEvents.filter((event) => {
+      const timestamp = new Date(event.occurredAt).getTime();
+      return Number.isFinite(timestamp) && timestamp >= weekStartMs && timestamp < weekEndMs;
+    });
+    const weekWorkMs = getWorkRangeDuration(segments, weekStartMs, weekEndMs, "work");
+    const todayDateKey = todayKey();
+    const dayFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" });
+    const weekdayFormatter = new Intl.DateTimeFormat("ja-JP", { weekday: "short" });
+    const hourLabels = [0, 6, 12, 18, 24].map((hour) => {
+      return '<span class="work-log-time-label" style="top:' + (hour / 24 * 100) + '%">' + String(hour).padStart(2, "0") + ':00</span>';
+    }).join("");
+
+    elements.workLogWeekLabel.textContent = formatWorkWeekLabel(weekStart);
+    elements.workLogWeekTotal.textContent = formatDuration(weekWorkMs);
+    elements.workLogEventCount.textContent = String(weekEvents.length);
+    elements.workLogSource.textContent = getWorkSourceLabel();
+    elements.workLogSource.dataset.state = state.mode === "remote" && state.workRemoteAvailable ? "synced" : "local";
+    elements.workLogSelectedDateLabel.textContent = formatWorkLogLongDate(parseWorkDateKey(selectedDate));
+
+    const timeAxis = '<div class="work-log-time-axis" aria-hidden="true">' + hourLabels + '</div>';
+    const columns = days.map((day) => {
+      const key = getWorkDateKey(day);
+      const daySegments = clipWorkSegmentsToDay(segments, day);
+      const dayWorkMs = daySegments.filter((segment) => segment.kind === "work")
+        .reduce((total, segment) => total + segment.end - segment.start, 0);
+      const blocks = daySegments.map((segment) => {
+        const top = ((segment.start - day.getTime()) / (24 * 60 * 60 * 1000)) * 100;
+        const height = Math.max(1.4, ((segment.end - segment.start) / (24 * 60 * 60 * 1000)) * 100);
+        const label = segment.kind === "work" ? "作業" : "休憩";
+        const title = label + " " + formatWorkClock(segment.start) + "–" + formatWorkClock(segment.end);
+        return '<span class="work-log-block work-log-block-' + segment.kind + '" style="top:' + top + '%;height:' + height + '%" title="' + escapeHtml(title) + '">' + escapeHtml(label) + '</span>';
+      }).join("");
+      const selectedClass = key === selectedDate ? " is-selected" : "";
+      const todayClass = key === todayDateKey ? " is-today" : "";
+      return '<div class="work-log-day-column' + selectedClass + '">' +
+        '<button class="work-log-day-header' + todayClass + '" type="button" data-work-log-date="' + escapeHtml(key) + '" aria-pressed="' + (key === selectedDate ? "true" : "false") + '">' +
+          '<span>' + escapeHtml(dayFormatter.format(day)) + '</span>' +
+          '<strong>' + escapeHtml(weekdayFormatter.format(day)) + '</strong>' +
+          '<em>' + escapeHtml(formatWorkDurationShort(dayWorkMs)) + '</em>' +
+        '</button>' +
+        '<div class="work-log-day-body">' + blocks + '</div>' +
+      '</div>';
+    }).join("");
+
+    elements.workLogCalendar.innerHTML = '<div class="work-log-calendar-grid">' + timeAxis + columns + '</div>';
+
+    const selectedEvents = sortWorkEvents(state.workEvents.filter((event) => getWorkDateKey(event.occurredAt) === selectedDate));
+    const anomalyMap = getWorkEventAnomalyMap(state.workEvents);
+    if (!selectedEvents.length) {
+      elements.workLogEvents.innerHTML = '<li class="work-log-empty">この日のイベントはありません。</li>';
+      return;
+    }
+    elements.workLogEvents.innerHTML = selectedEvents.map((event) => {
+      const occurredDate = new Date(event.occurredAt);
+      const createdDate = new Date(event.createdAt);
+      const createdText = Number.isFinite(createdDate.getTime()) &&
+        Math.abs(createdDate.getTime() - occurredDate.getTime()) > 60 * 1000
+        ? '<small>登録 ' + escapeHtml(formatDateTime(event.createdAt)) + '</small>'
+        : "";
+      const anomaly = anomalyMap.get(event.id);
+      const anomalyText = anomaly ? '<span class="work-log-event-warning">' + escapeHtml(anomaly) + '</span>' : "";
+      return '<li class="work-log-event-item work-log-event-' + escapeHtml(event.eventType) + '">' +
+        '<time datetime="' + escapeHtml(event.occurredAt) + '">' + escapeHtml(formatDateTime(event.occurredAt)) + '</time>' +
+        '<strong>' + escapeHtml(WORK_EVENT_LABELS[event.eventType] || event.eventType) + '</strong>' +
+        '<span class="work-log-event-source">' + escapeHtml(getWorkEventSourceLabel(event)) + '</span>' +
+        anomalyText + createdText +
+      '</li>';
+    }).join("");
+  }
+
+  function openWorkLogModal() {
+    state.workLogDate = state.workLogDate || todayKey();
+    elements.workLogModal.hidden = false;
+    document.body.classList.add("modal-open");
+    renderWorkLog();
+  }
+
+  function closeWorkLogModal() {
+    elements.workLogModal.hidden = true;
+    if (
+      elements.appSettingsMenu.hidden &&
+      elements.taskModal.hidden &&
+      elements.researchPlanModal.hidden &&
+      elements.researchScheduleModal.hidden &&
+      elements.researchPlanDetailModal.hidden &&
+      elements.researchTaskDetailModal.hidden &&
+      elements.workCorrectionModal.hidden
+    ) document.body.classList.remove("modal-open");
+  }
+
+  function moveWorkLogWeek(amount) {
+    const date = parseWorkDateKey(state.workLogDate || todayKey());
+    date.setDate(date.getDate() + amount * 7);
+    state.workLogDate = getWorkDateKey(date);
+    renderWorkLog();
+  }
+
+  function handleWorkLogClick(event) {
+    const dateButton = event.target.closest("[data-work-log-date]");
+    if (!dateButton) return;
+    state.workLogDate = dateButton.dataset.workLogDate;
+    renderWorkLog();
+  }
+
+  async function refreshWorkLog() {
+    elements.workLogRefreshButton.disabled = true;
+    try {
+      if (state.mode === "remote" && state.user && supabaseClient) {
+        await loadRemoteWorkEvents();
+      } else {
+        state.workEvents = readLocalWorkEvents();
+        state.workEventsLoaded = true;
+        renderWorkTimer();
+      }
+      showToast("作業記録を再読込しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    } finally {
+      elements.workLogRefreshButton.disabled = false;
+      renderWorkLog();
+    }
+  }
+
   function isMissingWorkEventsTable(error) {
     const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
     return message.includes("work_events") || message.includes("work events");
   }
 
   async function loadRemoteWorkEvents() {
+    const requestId = ++state.workEventsLoadSequence;
+    const revisionAtStart = state.workEventsRevision;
     const result = await supabaseClient
       .from(WORK_EVENTS_TABLE)
       .select(WORK_EVENT_SELECT_FIELDS)
       .order("occurred_at", { ascending: true })
       .order("created_at", { ascending: true });
+
+    if (requestId !== state.workEventsLoadSequence || revisionAtStart !== state.workEventsRevision) return;
+
     if (result.error) {
       if (!isMissingWorkEventsTable(result.error)) console.warn("作業記録の同期読み込みに失敗しました", result.error);
       state.workRemoteAvailable = false;
@@ -846,9 +1164,11 @@
     } else {
       state.workRemoteAvailable = true;
       state.workEvents = sortWorkEvents((result.data || []).map(normalizeWorkEvent));
+      writeLocalWorkEvents();
     }
     state.workEventsLoaded = true;
     renderWorkTimer();
+    if (elements.workLogModal && !elements.workLogModal.hidden) renderWorkLog();
     checkWorkWarnings();
   }
 
@@ -867,18 +1187,20 @@
         if (!isMissingWorkEventsTable(result.error)) throw result.error;
         state.workRemoteAvailable = false;
       } else {
-        state.workEvents = sortWorkEvents([...state.workEvents, normalizeWorkEvent(result.data)]);
+        const savedEvent = normalizeWorkEvent(result.data) || event;
+        const mergedEvent = upsertWorkEvent(savedEvent) || savedEvent;
         state.workEventsLoaded = true;
+        writeLocalWorkEvents();
         syncWorkStatusLabel();
-        return normalizeWorkEvent(result.data);
+        return mergedEvent;
       }
     }
 
-    state.workEvents = sortWorkEvents([...state.workEvents, event]);
+    const savedEvent = upsertWorkEvent(event) || event;
     state.workEventsLoaded = true;
     writeLocalWorkEvents();
     syncWorkStatusLabel();
-    return event;
+    return savedEvent;
   }
 
   async function recordWorkAction(eventType) {
@@ -893,7 +1215,7 @@
     state.workActionInFlight = true;
     renderWorkTimer();
     try {
-      await appendWorkEvent(eventType);
+      await appendWorkEvent(eventType, undefined, { source: "button" });
       const messages = { start: "作業を開始しました", break_start: "休憩を開始しました", break_end: "作業を再開しました", end: "作業を終了しました" };
       render();
       showToast(messages[eventType]);
@@ -925,7 +1247,8 @@
       elements.researchPlanModal.hidden &&
       elements.researchScheduleModal.hidden &&
       elements.researchPlanDetailModal.hidden &&
-      elements.researchTaskDetailModal.hidden
+      elements.researchTaskDetailModal.hidden &&
+      (!elements.workLogModal || elements.workLogModal.hidden)
     ) document.body.classList.remove("modal-open");
   }
 
@@ -2085,6 +2408,7 @@
     elements.taskList.hidden = visibleTasks.length === 0;
     elements.emptyState.hidden = visibleTasks.length !== 0;
     renderResearch();
+    if (elements.workLogModal && !elements.workLogModal.hidden) renderWorkLog();
 
     if (state.search.trim()) {
       elements.emptyTitle.textContent = "該当するタスクがありません";
@@ -2170,9 +2494,13 @@
   }
 
   async function handleSession(session) {
+    const previousUserId = state.user?.id || null;
     state.user = session?.user || null;
+    const userChanged = previousUserId !== (state.user?.id || null);
     window.dispatchEvent(new CustomEvent("vectory:session-change", { detail: { signedIn: Boolean(state.user) } }));
     if (!state.user) {
+      state.workEventsLoadSequence += 1;
+      state.workEventsRevision += 1;
       state.tasks = [];
       state.plans = [];
       state.schedules = [];
@@ -2185,6 +2513,13 @@
       return;
     }
 
+    if (userChanged) {
+      state.workEventsLoadSequence += 1;
+      state.workEventsRevision += 1;
+      state.workEvents = [];
+      state.workEventsLoaded = false;
+      state.workRemoteAvailable = true;
+    }
     localStorage.removeItem(LOCAL_MODE_KEY);
     loadUserAppSettings(state.user);
     elements.accountInitial.textContent = (state.user.email || "M").slice(0, 1).toUpperCase();
@@ -2911,6 +3246,7 @@
     elements.workBreakButton.addEventListener("click", () => recordWorkAction("break_start"));
     elements.workResumeButton.addEventListener("click", () => recordWorkAction("break_end"));
     elements.workEndButton.addEventListener("click", () => recordWorkAction("end"));
+    elements.openWorkLogButton.addEventListener("click", openWorkLogModal);
     elements.workCorrectEndButton.addEventListener("click", openWorkCorrectionModal);
     elements.workContinueButton.addEventListener("click", () => acknowledgeWorkWarning(getWorkWarningSnapshot()));
     elements.workAcknowledgeButton.addEventListener("click", () => acknowledgeWorkWarning(getWorkWarningSnapshot()));
@@ -2920,6 +3256,16 @@
     elements.workCorrectionModal.addEventListener("click", (event) => {
       if (event.target === elements.workCorrectionModal) closeWorkCorrectionModal();
     });
+    elements.workLogModal.addEventListener("click", handleWorkLogClick);
+    elements.workLogPreviousButton.addEventListener("click", () => moveWorkLogWeek(-1));
+    elements.workLogTodayButton.addEventListener("click", () => {
+      state.workLogDate = todayKey();
+      renderWorkLog();
+    });
+    elements.workLogNextButton.addEventListener("click", () => moveWorkLogWeek(1));
+    elements.workLogRefreshButton.addEventListener("click", refreshWorkLog);
+    elements.closeWorkLogModal.addEventListener("click", closeWorkLogModal);
+    elements.closeWorkLogModalButton.addEventListener("click", closeWorkLogModal);
     elements.addTaskButton.addEventListener("click", () => openTaskModal());
     elements.emptyAddButton.addEventListener("click", () => openTaskModal());
     elements.addResearchPlanButton.addEventListener("click", () => openResearchPlanModal());
@@ -3025,6 +3371,7 @@
       const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
       if (event.key === "Escape" && !elements.appSettingsMenu.hidden) closeAppSettings();
       else if (event.key === "Escape" && !elements.workCorrectionModal.hidden) closeWorkCorrectionModal();
+      else if (event.key === "Escape" && !elements.workLogModal.hidden) closeWorkLogModal();
       else if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
       else if (event.key === "Escape" && !elements.researchPlanModal.hidden) closeResearchPlanModal();
       else if (event.key === "Escape" && !elements.researchScheduleModal.hidden) closeResearchScheduleModal();
