@@ -118,7 +118,7 @@
             <div>
               <p class="section-kicker">WORK TIME</p>
               <h2 id="workTimerTitle">作業時間</h2>
-              <p class="work-timer-subtitle">開始・休憩・終了の操作をイベントとして記録します。</p>
+              <p class="work-timer-subtitle">操作と、取り組むタスク・ジャンル・メモを記録します。</p>
             </div>
             <div class="work-timer-tools">
               <span id="workTimerSyncStatus" class="work-timer-sync-status">この端末のみ</span>
@@ -131,6 +131,7 @@
               <span id="workTimerStateLabel" class="work-timer-state-label">未作業</span>
               <strong id="workTimerElapsed" class="work-timer-elapsed">00:00:00</strong>
               <span id="workTimerDetail" class="work-timer-detail">記録はまだありません。</span>
+              <span id="workTimerContext" class="work-timer-context" hidden></span>
             </div>
             <div class="work-timer-actions" aria-label="作業時間の操作">
               <button id="workStartButton" class="primary-button" type="button">作業開始</button>
@@ -697,6 +698,43 @@
       </section>
     </div>
 
+    <div id="workContextModal" class="modal-backdrop" hidden>
+      <section class="research-modal work-context-modal" role="dialog" aria-modal="true" aria-labelledby="workContextTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">WORK TIME</p>
+            <h2 id="workContextTitle">作業内容を記録</h2>
+            <p class="work-context-description">作業開始前に、取り組むタスク・ジャンル・メモを登録します。</p>
+          </div>
+          <button id="closeWorkContextModal" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <form id="workContextForm" class="research-form">
+          <label class="field-span-2">
+            取り組むタスク（任意）
+            <select id="workContextTask">
+              <option value="">タスクを選択しない</option>
+            </select>
+            <small class="field-help">既存タスクを選ぶと、作業記録にタスク名を保存します。</small>
+          </label>
+          <label class="field-span-2">
+            ジャンル（任意）
+            <select id="workContextCategory">
+              <option value="">未分類</option>
+            </select>
+          </label>
+          <label class="field-span-2">
+            作業メモ（任意）
+            <textarea id="workContextMemo" maxlength="2000" rows="5" placeholder="今回やったこと、確認したこと、次にやること"></textarea>
+          </label>
+          <div class="modal-actions field-span-2">
+            <span class="action-spacer"></span>
+            <button id="cancelWorkContextButton" class="secondary-button" type="button">キャンセル</button>
+            <button class="primary-button" type="submit">作業を開始</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <div id="workCorrectionModal" class="modal-backdrop" hidden>
       <section class="research-modal work-correction-modal" role="dialog" aria-modal="true" aria-labelledby="workCorrectionTitle">
         <div class="modal-header">
@@ -756,6 +794,8 @@
             <strong id="workLogSource">この端末</strong>
           </div>
         </div>
+
+        <div id="workLogCategorySummary" class="work-log-category-summary" aria-label="ジャンル別作業時間"></div>
 
         <div class="work-log-calendar-wrap">
           <div id="workLogCalendar" class="work-log-calendar" aria-label="週の作業タイムライン"></div>
