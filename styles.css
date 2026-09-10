@@ -1172,6 +1172,25 @@ p {
   font-size: 11px;
 }
 
+.work-timer-context {
+  margin-top: 1px;
+  overflow-wrap: anywhere;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.work-context-description {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.work-context-modal {
+  width: min(560px, 100%);
+}
+
 .work-timer-actions {
   display: flex;
   flex: 0 0 auto;
@@ -1340,6 +1359,44 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
+.work-log-category-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 16px;
+}
+
+.work-log-category-summary-label {
+  margin-right: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.work-log-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 1px solid rgba(31, 61, 56, 0.15);
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--muted-dark);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.work-log-category-chip strong {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.work-log-category-empty {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .work-log-calendar-wrap {
   overflow-x: auto;
   padding-bottom: 5px;
@@ -1506,6 +1563,46 @@ p {
   border-left: 3px solid var(--green);
   border-radius: 8px;
   background: rgba(248, 245, 237, 0.58);
+}
+
+.work-log-event-content {
+  display: grid;
+  flex: 1 1 220px;
+  min-width: 0;
+  gap: 4px;
+}
+
+.work-log-event-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  min-width: 0;
+}
+
+.work-log-event-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.work-log-event-context span {
+  overflow-wrap: anywhere;
+}
+
+.work-log-context-task,
+.work-log-context-category {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.work-log-context-memo {
+  flex: 1 1 100%;
+  white-space: pre-wrap;
 }
 
 .work-log-event-item time {
