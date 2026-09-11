@@ -131,7 +131,10 @@
               <span id="workTimerStateLabel" class="work-timer-state-label">未作業</span>
               <strong id="workTimerElapsed" class="work-timer-elapsed">00:00:00</strong>
               <span id="workTimerDetail" class="work-timer-detail">記録はまだありません。</span>
-              <span id="workTimerContext" class="work-timer-context" hidden></span>
+              <div class="work-timer-context-row">
+                <span id="workTimerContext" class="work-timer-context" hidden></span>
+                <button id="workEditContextButton" class="text-button work-edit-context-button" type="button" hidden>内容を編集</button>
+              </div>
             </div>
             <div class="work-timer-actions" aria-label="作業時間の操作">
               <button id="workStartButton" class="primary-button" type="button">作業開始</button>
@@ -717,7 +720,7 @@
             <small class="field-help">既存タスクを選ぶと、作業記録にタスク名を保存します。</small>
           </label>
           <label class="field-span-2">
-            ジャンル（任意）
+            ジャンル / タグ（任意）
             <select id="workContextCategory">
               <option value="">未分類</option>
             </select>
@@ -765,7 +768,7 @@
           <div>
             <p class="section-kicker">WORK LOG</p>
             <h2 id="workLogTitle">作業記録</h2>
-            <p class="work-log-description">保存されたイベントから、実作業時間と日ごとのタイムラインを表示します。</p>
+            <p class="work-log-description">保存されたイベントから、実作業時間と日ごとのタイムラインを表示します。日付をクリックすると、その日の記録を編集できます。</p>
           </div>
           <button id="closeWorkLogModal" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
         </div>
@@ -782,16 +785,12 @@
 
         <div class="work-log-summary" aria-label="作業記録の概要">
           <div>
-            <span>週の実作業</span>
+            <span>日作業時間</span>
+            <strong id="workLogDayTotal">00:00:00</strong>
+          </div>
+          <div>
+            <span>週作業時間</span>
             <strong id="workLogWeekTotal">00:00:00</strong>
-          </div>
-          <div>
-            <span>イベント数</span>
-            <strong id="workLogEventCount">0</strong>
-          </div>
-          <div>
-            <span>保存先</span>
-            <strong id="workLogSource">この端末</strong>
           </div>
         </div>
 
@@ -813,6 +812,25 @@
         <div class="modal-actions">
           <span class="action-spacer"></span>
           <button id="closeWorkLogModalButton" class="secondary-button" type="button">閉じる</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="workRecordEditorModal" class="modal-backdrop work-record-editor-backdrop" hidden>
+      <section class="research-modal work-record-editor-modal" role="dialog" aria-modal="true" aria-labelledby="workRecordEditorTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">WORK RECORD</p>
+            <h2 id="workRecordEditorTitle">作業記録を編集</h2>
+            <p class="work-record-editor-description">作業セッションごとに、取り組んだタスク・ジャンル（タグ）・メモを確認して編集できます。</p>
+          </div>
+          <button id="closeWorkRecordEditor" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div id="workRecordEditorSummary" class="work-record-editor-summary"></div>
+        <div id="workRecordEditorSessions" class="work-record-editor-sessions"></div>
+        <div class="modal-actions">
+          <span class="action-spacer"></span>
+          <button id="closeWorkRecordEditorButton" class="secondary-button" type="button">閉じる</button>
         </div>
       </section>
     </div>
