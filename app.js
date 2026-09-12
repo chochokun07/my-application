@@ -234,6 +234,7 @@
     notesDataNotice: $("notesDataNotice"),
     notesList: $("notesList"),
     notesEmpty: $("notesEmpty"),
+    addNoteButton: $("addNoteButton"),
     sidebarNoteCount: $("sidebarNoteCount"),
     authForm: $("authForm"),
     authEmail: $("authEmail"),
