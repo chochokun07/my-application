@@ -653,6 +653,72 @@
         </section>
       </section>
 
+      <section id="personalityPage" class="page-view personality-page" data-page-view="personality" hidden aria-labelledby="personalityPageTitle">
+        <div class="page-heading personality-page-heading">
+          <div>
+            <p class="section-kicker">PERSONALITY</p>
+            <h1 id="personalityPageTitle">個性</h1>
+            <p id="personalityPageSubtitle" class="page-subtitle">自分の傾向を、現在値と平均水準の差で見える化します。</p>
+          </div>
+          <div class="page-heading-actions">
+            <button class="secondary-button" type="button" data-personality-action="open-settings">項目を編集</button>
+          </div>
+        </div>
+
+        <section class="personality-panel" aria-labelledby="personalityChartHeading">
+          <div class="personality-panel-heading">
+            <div>
+              <p class="section-kicker">SELF ANALYSIS</p>
+              <h2 id="personalityChartHeading">自分の形</h2>
+              <p>現在値と、満たしたい平均水準を重ねて表示します。</p>
+            </div>
+            <div class="personality-legend" aria-label="チャートの凡例">
+              <span><i class="personality-legend-swatch personality-legend-current" aria-hidden="true"></i>現在値</span>
+              <span><i class="personality-legend-swatch personality-legend-standard" aria-hidden="true"></i>平均水準</span>
+            </div>
+          </div>
+          <div class="personality-chart-wrap">
+            <div id="personalityChart" class="personality-chart" data-personality-chart></div>
+          </div>
+          <div id="personalityScoreTable" class="personality-score-table" data-personality-score-table></div>
+        </section>
+
+        <section class="research-panel activity-notes-panel" data-notes-activity="personality" aria-labelledby="personalityNotesTitle">
+          <div class="research-panel-heading activity-notes-heading">
+            <div>
+              <p class="section-kicker">NOTES</p>
+              <h2 id="personalityNotesTitle">個性ノート</h2>
+              <p>自分についての気づきや自己分析をまとめます。</p>
+            </div>
+            <button class="secondary-button" type="button" data-note-action="add" data-note-activity="personality">＋ ノートを追加</button>
+          </div>
+          <p class="notes-panel-notice" data-notes-notice hidden></p>
+          <div class="notes-grid notes-activity-grid" data-notes-list="personality"></div>
+          <div class="notes-empty" data-notes-empty hidden>
+            <span class="research-empty-mark" aria-hidden="true">◈</span>
+            <p data-notes-empty-text>個性ノートはまだありません。</p>
+            <button class="text-button" type="button" data-note-action="add" data-note-activity="personality">個性ノートを追加</button>
+          </div>
+        </section>
+
+        <section class="research-panel activity-task-panel" aria-labelledby="personalityTaskTitle">
+          <div class="research-panel-heading activity-tasks-heading">
+            <div>
+              <p class="section-kicker">PERSONALITY TASKS</p>
+              <h2 id="personalityTaskTitle">個性タスク</h2>
+              <p id="personalityTaskDescription">タグに「個性」を付けたタスクがここに表示されます。</p>
+            </div>
+            <button class="secondary-button" type="button" data-activity-task-add="personality">＋ 個性タスクを追加</button>
+          </div>
+          <div id="personalityTaskList" class="task-list activity-task-list" data-activity-task-list="personality"></div>
+          <div id="personalityTaskEmpty" class="research-empty" data-activity-task-empty="personality" hidden>
+            <span class="research-empty-mark" aria-hidden="true">◈</span>
+            <p>個性タスクはまだありません。</p>
+            <button class="text-button" type="button" data-activity-task-add="personality">個性タスクを追加</button>
+          </div>
+        </section>
+      </section>
+
       <div id="customActivityPages" class="custom-activity-pages"></div>
     </main>
 
@@ -745,6 +811,25 @@
                 <input id="settingsTodoNavLabel" type="text" maxlength="30" required />
               </label>
             </div>
+          </section>
+
+          <section class="app-settings-section">
+            <div class="app-settings-section-heading">
+              <div>
+                <p class="section-kicker">PERSONALITY</p>
+                <h3>個性レーダーの項目</h3>
+                <p>項目ごとに現在値と、満たしたい平均水準を0〜100で設定します。3〜12項目を登録できます。</p>
+              </div>
+            </div>
+            <div id="settingsPersonalityAxes" class="settings-personality-axes"></div>
+            <div class="settings-add-personality-axis">
+              <label>
+                新しい項目
+                <input id="newPersonalityAxisName" type="text" maxlength="40" placeholder="例：説明力" />
+              </label>
+              <button id="addPersonalityAxisButton" class="secondary-button" type="button">＋ 項目を追加</button>
+            </div>
+            <p class="settings-help-text">現在値−平均水準の差が、平均より高いか低いかとしてチャート下に表示されます。</p>
           </section>
 
           <section class="app-settings-section">
