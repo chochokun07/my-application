@@ -4010,6 +4010,353 @@ select:hover {
 }
 
 
+/* 個性レーダーチャート */
+.personality-page {
+  padding-bottom: 72px;
+}
+
+.personality-page-heading {
+  margin-bottom: 24px;
+}
+
+.personality-panel {
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 253, 248, 0.82);
+  box-shadow: var(--shadow);
+}
+
+.personality-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.personality-panel-heading h2 {
+  margin: 0;
+  font-size: 25px;
+  letter-spacing: -0.03em;
+}
+
+.personality-panel-heading p:not(.section-kicker) {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.personality-legend {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 11px;
+  padding-top: 3px;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.personality-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.personality-legend-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.personality-legend-current {
+  border: 2px solid var(--green);
+  background: rgba(31, 61, 56, 0.2);
+}
+
+.personality-legend-standard {
+  border: 2px dashed var(--orange);
+  background: rgba(217, 128, 85, 0.08);
+}
+
+.personality-chart-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 3px auto 0;
+}
+
+.personality-chart {
+  width: min(100%, 560px);
+}
+
+.personality-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.personality-grid-ring {
+  fill: none;
+  stroke: rgba(32, 48, 45, 0.14);
+  stroke-width: 1;
+}
+
+.personality-spoke {
+  stroke: rgba(32, 48, 45, 0.15);
+  stroke-width: 1;
+}
+
+.personality-scale-label {
+  fill: var(--muted);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.personality-axis-label {
+  fill: var(--muted-dark);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.personality-standard-polygon {
+  fill: rgba(217, 128, 85, 0.08);
+  stroke: var(--orange);
+  stroke-dasharray: 5 5;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.personality-current-polygon {
+  fill: rgba(31, 61, 56, 0.2);
+  stroke: var(--green);
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.personality-current-point {
+  fill: var(--green);
+  stroke: #fffdf8;
+  stroke-width: 2;
+}
+
+.personality-chart-empty {
+  display: grid;
+  min-height: 300px;
+  place-content: center;
+  gap: 8px;
+  padding: 30px 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.personality-chart-empty strong {
+  color: var(--muted-dark);
+  font-size: 15px;
+}
+
+.personality-chart-empty span {
+  font-size: 11px;
+}
+
+.personality-score-table-wrap {
+  overflow-x: auto;
+  border-top: 1px solid var(--line);
+}
+
+.personality-score-table table {
+  width: 100%;
+  min-width: 430px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.personality-score-table caption {
+  padding: 15px 0 8px;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: left;
+}
+
+.personality-score-table th,
+.personality-score-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.personality-score-table tr:last-child th,
+.personality-score-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.personality-score-table thead th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.personality-score-table thead th:first-child,
+.personality-score-table tbody th {
+  text-align: left;
+}
+
+.personality-score-table tbody th {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.personality-score-difference {
+  display: inline-flex;
+  min-width: 39px;
+  justify-content: center;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.personality-score-difference.is-above {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.personality-score-difference.is-below {
+  background: #fff0e9;
+  color: #a85d3e;
+}
+
+.personality-score-difference.is-even {
+  background: var(--paper-deep);
+  color: var(--muted-dark);
+}
+
+.personality-score-empty {
+  margin: 15px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settings-personality-axes {
+  display: grid;
+  gap: 9px;
+}
+
+.settings-personality-axis-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.settings-personality-axis-index {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-personality-axis-fields {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.2fr) repeat(2, minmax(90px, 0.65fr));
+  gap: 9px;
+  min-width: 0;
+}
+
+.settings-personality-axis-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted-dark);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.settings-personality-axis-delete {
+  padding: 6px 8px;
+  font-size: 10px;
+}
+
+.settings-add-personality-axis {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.settings-add-personality-axis label {
+  flex: 1;
+}
+
+.settings-add-personality-axis .secondary-button {
+  flex: 0 0 auto;
+  padding: 9px 11px;
+  font-size: 11px;
+}
+
+@media (max-width: 680px) {
+  .personality-panel {
+    padding: 16px 12px;
+    border-radius: 17px;
+  }
+
+  .personality-panel-heading {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .personality-legend {
+    padding-top: 0;
+  }
+
+  .settings-personality-axis-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .settings-personality-axis-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-personality-axis-fields label:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .settings-personality-axis-delete {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .settings-add-personality-axis {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-add-personality-axis .secondary-button {
+    width: 100%;
+  }
+}
+
+
 /* 研究ページの表示整理 */
 .research-stack { display: flex; flex-direction: column; gap: 24px; }
 .research-stack > .research-panel, .research-tasks-panel { width: 100%; }
