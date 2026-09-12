@@ -16,6 +16,8 @@
   const RESEARCH_SCHEDULE_HORIZON_STORAGE_KEY = "my-application.research-schedule-horizon.v0.1";
   const NOTES_STORAGE_KEY = "my-application.notes.v0.1";
   const LOCAL_MODE_KEY = "my-application.local-mode";
+  const PERSONALITY_MIN_AXES = 3;
+  const PERSONALITY_MAX_AXES = 12;
   const TABLE_NAME = "tasks";
   const WORK_EVENTS_TABLE = "work_events";
   const RESEARCH_PLANS_TABLE = "research_plans";
@@ -32,7 +34,15 @@
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
   const CORE_PAGE_VIEWS = new Set(["home", "todo", "notes"]);
-  const BUILTIN_ACTIVITY_IDS = new Set(["hobby", "research", "creation"]);
+  const BUILTIN_ACTIVITY_IDS = new Set(["hobby", "research", "creation", "personality"]);
+  const DEFAULT_PERSONALITY_AXES = Object.freeze([
+    { id: "focus", label: "集中力", selfScore: 50, standardScore: 50 },
+    { id: "action", label: "行動力", selfScore: 50, standardScore: 50 },
+    { id: "continuity", label: "継続力", selfScore: 50, standardScore: 50 },
+    { id: "ideas", label: "発想力", selfScore: 50, standardScore: 50 },
+    { id: "communication", label: "伝達力", selfScore: 50, standardScore: 50 },
+    { id: "recovery", label: "回復力", selfScore: 50, standardScore: 50 },
+  ]);
   const DEFAULT_APP_SETTINGS = Object.freeze({
     appName: "My application",
     brandOverline: "PERSONAL PLATFORM",
@@ -44,10 +54,12 @@
     homeNavLabel: "ホーム",
     todoNavLabel: "To Do",
     customTags: [],
+    personalityAxes: DEFAULT_PERSONALITY_AXES,
     activities: [
       { id: "hobby", label: "趣味", description: "動画ごとの構想と台本を、同じプロジェクトで管理します。", icon: "✦" },
       { id: "research", label: "研究", description: "予定・プラン・タスクを、研究の流れに沿ってまとめます。", icon: "⌁" },
       { id: "creation", label: "創作", description: "創作の内容をここで整理します。", icon: "✎" },
+      { id: "personality", label: "個性", description: "自分の傾向を、現在値と平均水準の差で見える化します。", icon: "◈" },
     ],
   });
   let activeAppSettings = readAppSettings();
@@ -120,6 +132,7 @@
     researchPage: $("researchPage"),
     creationPage: $("creationPage"),
     hobbyPage: $("hobbyPage"),
+    personalityPage: $("personalityPage"),
     researchDataNotice: $("researchDataNotice"),
     researchDataNoticeText: $("researchDataNoticeText"),
     researchOpenPlanCount: $("researchOpenPlanCount"),
@@ -141,6 +154,14 @@
     creationTaskEmpty: $("creationTaskEmpty"),
     creationTaskTitle: $("creationTaskTitle"),
     creationTaskDescription: $("creationTaskDescription"),
+    personalityPageTitle: $("personalityPageTitle"),
+    personalityPageSubtitle: $("personalityPageSubtitle"),
+    personalityTaskTitle: $("personalityTaskTitle"),
+    personalityTaskDescription: $("personalityTaskDescription"),
+    personalityChart: $("personalityChart"),
+    personalityScoreTable: $("personalityScoreTable"),
+    personalityTaskList: $("personalityTaskList"),
+    personalityTaskEmpty: $("personalityTaskEmpty"),
     authShell: $("authShell"),
     setupNotice: $("setupNotice"),
     syncStatus: $("syncStatus"),
@@ -338,10 +359,13 @@
     settingsTodoNavLabel: $("settingsTodoNavLabel"),
     settingsActivityList: $("settingsActivityList"),
     settingsTagList: $("settingsTagList"),
+    settingsPersonalityAxes: $("settingsPersonalityAxes"),
     newActivityName: $("newActivityName"),
     addActivityButton: $("addActivityButton"),
     newTagName: $("newTagName"),
     addTagButton: $("addTagButton"),
+    newPersonalityAxisName: $("newPersonalityAxisName"),
+    addPersonalityAxisButton: $("addPersonalityAxisButton"),
     resetAppSettingsButton: $("resetAppSettingsButton"),
     workCorrectionModal: $("workCorrectionModal"),
     workCorrectionForm: $("workCorrectionForm"),
@@ -2046,8 +2070,46 @@
     return {
       ...DEFAULT_APP_SETTINGS,
       customTags: [...DEFAULT_APP_SETTINGS.customTags],
+      personalityAxes: DEFAULT_PERSONALITY_AXES.map((axis) => ({ ...axis })),
       activities: DEFAULT_APP_SETTINGS.activities.map((activity) => ({ ...activity })),
     };
+  }
+
+  function clampPersonalityScore(value, fallback = 50) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.round(Math.min(100, Math.max(0, numeric)));
+  }
+
+  function normalizePersonalityAxes(value) {
+    const defaults = DEFAULT_PERSONALITY_AXES;
+    const rawAxes = Array.isArray(value) ? value : defaults;
+    const seen = new Set();
+    return rawAxes.map((axis, index) => {
+      const fallback = defaults[index] || defaults[0];
+      let id = String(axis?.id ?? `axis-${index + 1}`).trim();
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$/.test(id) || seen.has(id)) {
+        id = `axis-${index + 1}-${createId()}`;
+      }
+      const label = String(axis?.label ?? axis?.name ?? fallback?.label ?? "")
+        .replace(/[\r\n]+/g, " ")
+        .trim()
+        .slice(0, 40);
+      if (!label) return null;
+      seen.add(id);
+      return {
+        id,
+        label,
+        selfScore: clampPersonalityScore(
+          axis?.selfScore ?? axis?.currentScore ?? axis?.current,
+          fallback?.selfScore ?? 50
+        ),
+        standardScore: clampPersonalityScore(
+          axis?.standardScore ?? axis?.averageScore ?? axis?.average ?? axis?.baseline,
+          fallback?.standardScore ?? 50
+        ),
+      };
+    }).filter(Boolean).slice(0, PERSONALITY_MAX_AXES);
   }
 
   function normalizeAppSettings(value = {}) {
@@ -2088,6 +2150,7 @@
       homeNavLabel: textSetting("homeNavLabel", 30),
       todoNavLabel: textSetting("todoNavLabel", 30),
       customTags: normalizeTagCandidates(source.customTags ?? source.tagCandidates),
+      personalityAxes: normalizePersonalityAxes(source.personalityAxes),
       activities,
     };
   }
@@ -2112,6 +2175,14 @@
 
   function getActivityById(activityId) {
     return (state.appSettings?.activities || []).find((activity) => activity.id === activityId) || null;
+  }
+
+  function isPersonalityActivity(activity) {
+    return Boolean(activity && (activity.id === "personality" || tagKey(activity.label) === "個性"));
+  }
+
+  function getPersonalityActivity() {
+    return (state.appSettings?.activities || []).find(isPersonalityActivity) || null;
   }
 
   function applyAppSettings() {
@@ -2145,6 +2216,7 @@
     updateActivityPage("research", elements.researchPageTitle, elements.researchPageSubtitle);
     updateActivityPage("hobby", elements.hobbyPageTitle, elements.hobbyPageSubtitle);
     updateActivityPage("creation", elements.creationPageTitle, elements.creationPageSubtitle);
+    updateActivityPage("personality", elements.personalityPageTitle, elements.personalityPageSubtitle);
 
     const updateActivityTaskText = (activityId, titleElement, descriptionElement) => {
       const label = getActivityTagLabel(activityId, settings);
@@ -2158,6 +2230,7 @@
     updateActivityTaskText("research", elements.researchTaskTitle, elements.researchTaskDescription);
     updateActivityTaskText("hobby", elements.hobbyTaskTitle, elements.hobbyTaskDescription);
     updateActivityTaskText("creation", elements.creationTaskTitle, elements.creationTaskDescription);
+    updateActivityTaskText("personality", elements.personalityTaskTitle, elements.personalityTaskDescription);
   }
 
   function renderActivityNavigation() {
@@ -2170,63 +2243,140 @@
     `).join("");
   }
 
+  function renderPersonalityActivityPage(activity) {
+    const activityId = escapeHtml(activity.id);
+    const titleId = `personalityActivityTitle-${activity.id}`;
+    const notesTitleId = `personalityActivityNotesTitle-${activity.id}`;
+    const taskTitleId = `personalityActivityTaskTitle-${activity.id}`;
+    const taskLabel = escapeHtml(activity.label);
+    return `
+      <section id="customActivityPage-${activityId}" class="page-view personality-page custom-activity-page" data-page-view="${activityId}" hidden aria-labelledby="${escapeHtml(titleId)}">
+        <div class="page-heading personality-page-heading">
+          <div>
+            <p class="section-kicker">PERSONALITY</p>
+            <h1 id="${escapeHtml(titleId)}">${taskLabel}</h1>
+            <p class="page-subtitle">${escapeHtml(activity.description || "自分の傾向を、現在値と平均水準の差で見える化します。")}</p>
+          </div>
+          <div class="page-heading-actions">
+            <button class="secondary-button" type="button" data-personality-action="open-settings">項目を編集</button>
+          </div>
+        </div>
+
+        <section class="personality-panel" aria-labelledby="${escapeHtml(titleId)}-chart-heading">
+          <div class="personality-panel-heading">
+            <div>
+              <p class="section-kicker">SELF ANALYSIS</p>
+              <h2 id="${escapeHtml(titleId)}-chart-heading">自分の形</h2>
+              <p>現在値と、満たしたい平均水準を重ねて表示します。</p>
+            </div>
+            <div class="personality-legend" aria-label="チャートの凡例">
+              <span><i class="personality-legend-swatch personality-legend-current" aria-hidden="true"></i>現在値</span>
+              <span><i class="personality-legend-swatch personality-legend-standard" aria-hidden="true"></i>平均水準</span>
+            </div>
+          </div>
+          <div class="personality-chart-wrap">
+            <div class="personality-chart" data-personality-chart></div>
+          </div>
+          <div class="personality-score-table" data-personality-score-table></div>
+        </section>
+
+        <section class="research-panel activity-notes-panel" data-notes-activity="${activityId}" aria-labelledby="${escapeHtml(notesTitleId)}">
+          <div class="research-panel-heading activity-notes-heading">
+            <div>
+              <p class="section-kicker">NOTES</p>
+              <h2 id="${escapeHtml(notesTitleId)}">${taskLabel}ノート</h2>
+              <p>${taskLabel}についての気づきや自己分析をまとめます。</p>
+            </div>
+            <button class="secondary-button" type="button" data-note-action="add" data-note-activity="${activityId}">＋ ノートを追加</button>
+          </div>
+          <p class="notes-panel-notice" data-notes-notice hidden></p>
+          <div class="notes-grid notes-activity-grid" data-notes-list="${activityId}"></div>
+          <div class="notes-empty" data-notes-empty hidden>
+            <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+            <p data-notes-empty-text>${taskLabel}ノートはまだありません。</p>
+            <button class="text-button" type="button" data-note-action="add" data-note-activity="${activityId}">${taskLabel}ノートを追加</button>
+          </div>
+        </section>
+
+        <section class="research-panel activity-task-panel" aria-labelledby="${escapeHtml(taskTitleId)}">
+          <div class="research-panel-heading activity-tasks-heading">
+            <div>
+              <p class="section-kicker">PERSONALITY TASKS</p>
+              <h2 id="${escapeHtml(taskTitleId)}">${taskLabel}タスク</h2>
+              <p>タグに「${taskLabel}」を付けたタスクがここに表示されます。</p>
+            </div>
+            <button class="secondary-button" type="button" data-activity-task-add="${activityId}">＋ ${taskLabel}タスクを追加</button>
+          </div>
+          <div class="task-list activity-task-list" data-activity-task-list="${activityId}"></div>
+          <div class="research-empty" data-activity-task-empty="${activityId}" hidden>
+            <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+            <p>${taskLabel}タスクはまだありません。</p>
+            <button class="text-button" type="button" data-activity-task-add="${activityId}">${taskLabel}タスクを追加</button>
+          </div>
+        </section>
+      </section>
+    `;
+  }
+
   function renderCustomActivityPages() {
     if (!elements.customActivityPages) return;
     elements.customActivityPages.innerHTML = (state.appSettings?.activities || [])
       .filter((activity) => !BUILTIN_ACTIVITY_IDS.has(activity.id))
-      .map((activity) => {
-        const titleId = "customActivityTitle-" + activity.id;
-        const taskTitleId = "customActivityTaskTitle-" + activity.id;
-        const taskLabel = escapeHtml(activity.label);
-        return `
-          <section id="customActivityPage-${escapeHtml(activity.id)}" class="page-view blank-page custom-activity-page" data-page-view="${escapeHtml(activity.id)}" hidden aria-labelledby="${escapeHtml(titleId)}">
-            <div class="page-heading">
-              <div>
-                <p class="section-kicker">ACTIVITY</p>
-                <h1 id="${escapeHtml(titleId)}">${escapeHtml(activity.label)}</h1>
-                <p class="page-subtitle">${escapeHtml(activity.description || "この活動の内容をここで整理します。")}</p>
+      .map((activity) => isPersonalityActivity(activity)
+        ? renderPersonalityActivityPage(activity)
+        : (() => {
+          const titleId = "customActivityTitle-" + activity.id;
+          const taskTitleId = "customActivityTaskTitle-" + activity.id;
+          const taskLabel = escapeHtml(activity.label);
+          return `
+            <section id="customActivityPage-${escapeHtml(activity.id)}" class="page-view blank-page custom-activity-page" data-page-view="${escapeHtml(activity.id)}" hidden aria-labelledby="${escapeHtml(titleId)}">
+              <div class="page-heading">
+                <div>
+                  <p class="section-kicker">ACTIVITY</p>
+                  <h1 id="${escapeHtml(titleId)}">${escapeHtml(activity.label)}</h1>
+                  <p class="page-subtitle">${escapeHtml(activity.description || "この活動の内容をここで整理します。")}</p>
+                </div>
               </div>
-            </div>
 
-            <div class="blank-page-panel" aria-label="${escapeHtml(activity.label)}の内容">
-              <div class="blank-page-mark" aria-hidden="true">${escapeHtml(activity.icon)}</div>
-            </div>
-            <section class="research-panel activity-notes-panel" data-notes-activity="${escapeHtml(activity.id)}" aria-labelledby="${escapeHtml(titleId)}">
-              <div class="research-panel-heading activity-notes-heading">
-                <div>
-                  <p class="section-kicker">NOTES</p>
-                  <h2 id="${escapeHtml(titleId)}">${taskLabel}ノート</h2>
-                  <p>${taskLabel}の知見や気づきをまとめます。メインのノート一覧からも開けます。</p>
+              <div class="blank-page-panel" aria-label="${escapeHtml(activity.label)}の内容">
+                <div class="blank-page-mark" aria-hidden="true">${escapeHtml(activity.icon)}</div>
+              </div>
+              <section class="research-panel activity-notes-panel" data-notes-activity="${escapeHtml(activity.id)}" aria-labelledby="${escapeHtml(titleId)}">
+                <div class="research-panel-heading activity-notes-heading">
+                  <div>
+                    <p class="section-kicker">NOTES</p>
+                    <h2 id="${escapeHtml(titleId)}">${taskLabel}ノート</h2>
+                    <p>${taskLabel}の知見や気づきをまとめます。メインのノート一覧からも開けます。</p>
+                  </div>
+                  <button class="secondary-button" type="button" data-note-action="add" data-note-activity="${escapeHtml(activity.id)}">＋ ノートを追加</button>
                 </div>
-                <button class="secondary-button" type="button" data-note-action="add" data-note-activity="${escapeHtml(activity.id)}">＋ ノートを追加</button>
-              </div>
-              <p class="notes-panel-notice" data-notes-notice hidden></p>
-              <div class="notes-grid notes-activity-grid" data-notes-list="${escapeHtml(activity.id)}"></div>
-              <div class="notes-empty" data-notes-empty hidden>
-                <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
-                <p data-notes-empty-text>${taskLabel}ノートはまだありません。</p>
-                <button class="text-button" type="button" data-note-action="add" data-note-activity="${escapeHtml(activity.id)}">${taskLabel}ノートを追加</button>
-              </div>
-            </section>
-            <section class="research-panel activity-task-panel" aria-labelledby="${escapeHtml(taskTitleId)}">
-              <div class="research-panel-heading activity-tasks-heading">
-                <div>
-                  <p class="section-kicker">ACTIVITY TASKS</p>
-                  <h2 id="${escapeHtml(taskTitleId)}">${taskLabel}タスク</h2>
-                  <p>タグに「${taskLabel}」を付けたタスクがここに表示されます。</p>
+                <p class="notes-panel-notice" data-notes-notice hidden></p>
+                <div class="notes-grid notes-activity-grid" data-notes-list="${escapeHtml(activity.id)}"></div>
+                <div class="notes-empty" data-notes-empty hidden>
+                  <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+                  <p data-notes-empty-text>${taskLabel}ノートはまだありません。</p>
+                  <button class="text-button" type="button" data-note-action="add" data-note-activity="${escapeHtml(activity.id)}">${taskLabel}ノートを追加</button>
                 </div>
-                <button class="secondary-button" type="button" data-activity-task-add="${escapeHtml(activity.id)}">＋ ${taskLabel}タスクを追加</button>
-              </div>
-              <div class="task-list activity-task-list" data-activity-task-list="${escapeHtml(activity.id)}"></div>
-              <div class="research-empty" data-activity-task-empty="${escapeHtml(activity.id)}" hidden>
-                <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
-                <p>${taskLabel}タスクはまだありません。</p>
-                <button class="text-button" type="button" data-activity-task-add="${escapeHtml(activity.id)}">${taskLabel}タスクを追加</button>
-              </div>
+              </section>
+              <section class="research-panel activity-task-panel" aria-labelledby="${escapeHtml(taskTitleId)}">
+                <div class="research-panel-heading activity-tasks-heading">
+                  <div>
+                    <p class="section-kicker">ACTIVITY TASKS</p>
+                    <h2 id="${escapeHtml(taskTitleId)}">${taskLabel}タスク</h2>
+                    <p>タグに「${taskLabel}」を付けたタスクがここに表示されます。</p>
+                  </div>
+                  <button class="secondary-button" type="button" data-activity-task-add="${escapeHtml(activity.id)}">＋ ${taskLabel}タスクを追加</button>
+                </div>
+                <div class="task-list activity-task-list" data-activity-task-list="${escapeHtml(activity.id)}"></div>
+                <div class="research-empty" data-activity-task-empty="${escapeHtml(activity.id)}" hidden>
+                  <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+                  <p>${taskLabel}タスクはまだありません。</p>
+                  <button class="text-button" type="button" data-activity-task-add="${escapeHtml(activity.id)}">${taskLabel}タスクを追加</button>
+                </div>
+              </section>
             </section>
-          </section>
-        `;
-      }).join("");
+          `;
+        })()).join("");
   }
 
   function renderSettingsActivityList(settings = state.settingsDraft || state.appSettings || cloneDefaultAppSettings()) {
@@ -2253,6 +2403,35 @@
           <span class="settings-activity-badge">${activity.builtin ? "標準" : "追加"}</span>
           <button class="hobby-danger-button" type="button" data-settings-action="delete-activity" aria-label="${escapeHtml(activity.label)}を削除">削除</button>
         </div>
+      </div>
+    `).join("");
+  }
+
+  function renderSettingsPersonalityAxes(settings = state.settingsDraft || state.appSettings || cloneDefaultAppSettings()) {
+    if (!elements.settingsPersonalityAxes) return;
+    const axes = settings.personalityAxes || [];
+    if (!axes.length) {
+      elements.settingsPersonalityAxes.innerHTML = '<p class="settings-empty">項目はありません。新しい項目を追加してください。</p>';
+      return;
+    }
+    elements.settingsPersonalityAxes.innerHTML = axes.map((axis, index) => `
+      <div class="settings-personality-axis-row" data-personality-axis-id="${escapeHtml(axis.id)}">
+        <span class="settings-personality-axis-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>
+        <div class="settings-personality-axis-fields">
+          <label>
+            項目名
+            <input data-personality-axis-label type="text" maxlength="40" value="${escapeHtml(axis.label)}" required />
+          </label>
+          <label>
+            現在値
+            <input data-personality-axis-self type="number" min="0" max="100" step="1" value="${escapeHtml(axis.selfScore)}" required />
+          </label>
+          <label>
+            平均水準
+            <input data-personality-axis-standard type="number" min="0" max="100" step="1" value="${escapeHtml(axis.standardScore)}" required />
+          </label>
+        </div>
+        <button class="hobby-danger-button settings-personality-axis-delete" type="button" data-settings-action="delete-personality-axis" aria-label="${escapeHtml(axis.label)}を削除">削除</button>
       </div>
     `).join("");
   }
@@ -2288,7 +2467,25 @@
     elements.settingsHomeNavLabel.value = source.homeNavLabel;
     elements.settingsTodoNavLabel.value = source.todoNavLabel;
     renderSettingsActivityList(source);
+    renderSettingsPersonalityAxes(source);
     renderSettingsTagList(source);
+  }
+
+  function getPersonalityAxesFormValue(source) {
+    return (source.personalityAxes || []).map((axis) => {
+      const row = [...elements.settingsPersonalityAxes.querySelectorAll("[data-personality-axis-id]")]
+        .find((candidate) => candidate.dataset.personalityAxisId === axis.id);
+      const readScore = (selector, fallback) => {
+        const value = Number(row?.querySelector(selector)?.value);
+        return Number.isFinite(value) ? value : fallback;
+      };
+      return {
+        ...axis,
+        label: row?.querySelector("[data-personality-axis-label]")?.value.trim() || axis.label,
+        selfScore: readScore("[data-personality-axis-self]", axis.selfScore),
+        standardScore: readScore("[data-personality-axis-standard]", axis.standardScore),
+      };
+    });
   }
 
   function getAppSettingsFormValue() {
@@ -2313,6 +2510,7 @@
       homeNavLabel: elements.settingsHomeNavLabel.value,
       todoNavLabel: elements.settingsTodoNavLabel.value,
       customTags: source.customTags,
+      personalityAxes: getPersonalityAxesFormValue(source),
       activities,
     });
   }
@@ -2424,6 +2622,34 @@
     elements.newActivityName.focus();
   }
 
+  function addPersonalityAxis() {
+    const name = String(elements.newPersonalityAxisName.value || "").replace(/[\r\n]+/g, " ").trim().slice(0, 40);
+    if (!name) {
+      showToast("追加する項目名を入力してください。", true);
+      elements.newPersonalityAxisName.focus();
+      return;
+    }
+    const draft = state.settingsDraft || normalizeAppSettings(state.appSettings);
+    if ((draft.personalityAxes || []).length >= PERSONALITY_MAX_AXES) {
+      showToast(`項目は${PERSONALITY_MAX_AXES}個まで登録できます。`, true);
+      elements.newPersonalityAxisName.focus();
+      return;
+    }
+    if ((draft.personalityAxes || []).some((axis) => axis.label === name)) {
+      showToast("その項目はすでに登録されています。", true);
+      elements.newPersonalityAxisName.focus();
+      return;
+    }
+    draft.personalityAxes = [
+      ...(draft.personalityAxes || []),
+      { id: `axis-${createId()}`, label: name, selfScore: 50, standardScore: 50 },
+    ];
+    state.settingsDraft = normalizeAppSettings(draft);
+    elements.newPersonalityAxisName.value = "";
+    renderSettingsPersonalityAxes(state.settingsDraft);
+    elements.newPersonalityAxisName.focus();
+  }
+
   function addCustomTag() {
     const name = normalizeTagCandidate(elements.newTagName.value);
     if (!name) {
@@ -2470,6 +2696,20 @@
       state.settingsDraft.customTags = normalizeTagCandidates(state.settingsDraft.customTags)
         .filter((candidate) => tagKey(candidate) !== tagKey(tag));
       renderSettingsTagList(state.settingsDraft);
+      return;
+    }
+    if (action === "delete-personality-axis") {
+      const row = target.closest("[data-personality-axis-id]");
+      const axisId = row?.dataset.personalityAxisId;
+      if (!axisId || !state.settingsDraft) return;
+      if ((state.settingsDraft.personalityAxes || []).length <= PERSONALITY_MIN_AXES) {
+        showToast(`レーダーチャートには${PERSONALITY_MIN_AXES}項目以上必要です。`, true);
+        return;
+      }
+      const axis = state.settingsDraft.personalityAxes.find((item) => item.id === axisId);
+      if (!axis || !window.confirm("「" + axis.label + "」を個性の項目から削除しますか？")) return;
+      state.settingsDraft.personalityAxes = state.settingsDraft.personalityAxes.filter((item) => item.id !== axisId);
+      renderSettingsPersonalityAxes(state.settingsDraft);
     }
   }
 
@@ -2937,6 +3177,134 @@
     return sortActivityTasks(state.tasks.filter((task) => taskBelongsToActivity(task, activityId)));
   }
 
+  function getPersonalityAxes() {
+    return Array.isArray(state.appSettings?.personalityAxes) ? state.appSettings.personalityAxes : [];
+  }
+
+  function getPersonalityPoint(axisCount, index, value, radius, centerX, centerY) {
+    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / axisCount;
+    const distance = radius * clampPersonalityScore(value) / 100;
+    return {
+      x: centerX + Math.cos(angle) * distance,
+      y: centerY + Math.sin(angle) * distance,
+      angle,
+    };
+  }
+
+  function getPersonalityPolygonPoints(axes, scoreKey, radius, centerX, centerY) {
+    return axes.map((axis, index) => {
+      const point = getPersonalityPoint(axes.length, index, axis[scoreKey], radius, centerX, centerY);
+      return `${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+    }).join(" ");
+  }
+
+  function renderPersonalityChartSvg(axes) {
+    if (axes.length < PERSONALITY_MIN_AXES) {
+      return `
+        <div class="personality-chart-empty">
+          <strong>項目が${PERSONALITY_MIN_AXES}つ以上必要です</strong>
+          <span>設定画面から項目を追加すると、レーダーチャートを表示できます。</span>
+        </div>
+      `;
+    }
+
+    const width = 520;
+    const height = 470;
+    const centerX = 260;
+    const centerY = 228;
+    const radius = 150;
+    const labelRadius = 190;
+    const gridScales = [20, 40, 60, 80, 100];
+    const grid = gridScales.map((scale) => `
+      <polygon class="personality-grid-ring" points="${getPersonalityPolygonPoints(
+        axes.map(() => ({ selfScore: 100 })), "selfScore", radius * scale / 100, centerX, centerY
+      )}"></polygon>
+    `).join("");
+    const spokes = axes.map((axis, index) => {
+      const point = getPersonalityPoint(axes.length, index, 100, radius, centerX, centerY);
+      return `<line class="personality-spoke" x1="${centerX}" y1="${centerY}" x2="${point.x.toFixed(2)}" y2="${point.y.toFixed(2)}"></line>`;
+    }).join("");
+    const labels = axes.map((axis, index) => {
+      const point = getPersonalityPoint(axes.length, index, 100, labelRadius, centerX, centerY);
+      const cosine = Math.cos(point.angle);
+      const anchor = cosine > 0.35 ? "start" : cosine < -0.35 ? "end" : "middle";
+      const yOffset = Math.sin(point.angle) > 0.45 ? 7 : Math.sin(point.angle) < -0.45 ? -3 : 4;
+      return `<text class="personality-axis-label" x="${point.x.toFixed(2)}" y="${(point.y + yOffset).toFixed(2)}" text-anchor="${anchor}">${escapeHtml(axis.label)}</text>`;
+    }).join("");
+    const scaleLabels = gridScales.map((scale) => {
+      const y = centerY - radius * scale / 100;
+      return `<text class="personality-scale-label" x="${centerX + 6}" y="${(y - 3).toFixed(2)}">${scale}</text>`;
+    }).join("");
+    const standardPoints = getPersonalityPolygonPoints(axes, "standardScore", radius, centerX, centerY);
+    const currentPoints = getPersonalityPolygonPoints(axes, "selfScore", radius, centerX, centerY);
+    const currentDots = axes.map((axis, index) => {
+      const point = getPersonalityPoint(axes.length, index, axis.selfScore, radius, centerX, centerY);
+      return `<circle class="personality-current-point" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="4"></circle>`;
+    }).join("");
+
+    return `
+      <svg class="personality-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(axes.map((axis) => axis.label).join("、"))}の自己評価レーダーチャート">
+        <title>個性レーダーチャート</title>
+        <desc>現在値と平均水準を0から100の範囲で比較しています。</desc>
+        <g aria-hidden="true">
+          ${grid}
+          ${spokes}
+          ${scaleLabels}
+          <polygon class="personality-standard-polygon" points="${standardPoints}"></polygon>
+          <polygon class="personality-current-polygon" points="${currentPoints}"></polygon>
+          ${currentDots}
+          ${labels}
+        </g>
+      </svg>
+    `;
+  }
+
+  function formatPersonalityDifference(value) {
+    if (value > 0) return `+${value}`;
+    if (value < 0) return String(value);
+    return "±0";
+  }
+
+  function renderPersonalityScoreTableMarkup(axes) {
+    if (!axes.length) {
+      return '<p class="personality-score-empty">項目を設定すると、現在値と平均水準の差を確認できます。</p>';
+    }
+    return `
+      <div class="personality-score-table-wrap">
+        <table>
+          <caption>個性の項目別スコア</caption>
+          <thead>
+            <tr><th scope="col">項目</th><th scope="col">現在値</th><th scope="col">平均水準</th><th scope="col">差</th></tr>
+          </thead>
+          <tbody>
+            ${axes.map((axis) => {
+              const difference = clampPersonalityScore(axis.selfScore) - clampPersonalityScore(axis.standardScore);
+              const differenceClass = difference > 0 ? "is-above" : difference < 0 ? "is-below" : "is-even";
+              return `
+                <tr>
+                  <th scope="row">${escapeHtml(axis.label)}</th>
+                  <td>${clampPersonalityScore(axis.selfScore)}</td>
+                  <td>${clampPersonalityScore(axis.standardScore)}</td>
+                  <td><span class="personality-score-difference ${differenceClass}">${formatPersonalityDifference(difference)}</span></td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderPersonalityCharts() {
+    const axes = getPersonalityAxes();
+    document.querySelectorAll("[data-personality-chart]").forEach((chart) => {
+      chart.innerHTML = renderPersonalityChartSvg(axes);
+    });
+    document.querySelectorAll("[data-personality-score-table]").forEach((table) => {
+      table.innerHTML = renderPersonalityScoreTableMarkup(axes);
+    });
+  }
+
   function renderActivityTaskList(activityId, listElement, emptyElement) {
     if (!listElement || !emptyElement) return;
     const activity = getActivityById(activityId);
@@ -2956,6 +3324,7 @@
     renderActivityTaskList("research", elements.researchTaskList, elements.researchTaskEmpty);
     renderActivityTaskList("hobby", elements.hobbyTaskList, elements.hobbyTaskEmpty);
     renderActivityTaskList("creation", elements.creationTaskList, elements.creationTaskEmpty);
+    renderActivityTaskList("personality", elements.personalityTaskList, elements.personalityTaskEmpty);
     document.querySelectorAll("[data-activity-task-list]").forEach((listElement) => {
       const activityId = listElement.dataset.activityTaskList;
       const emptyElement = document.querySelector(`[data-activity-task-empty="${activityId}"]`);
@@ -3152,6 +3521,7 @@
     applyAppSettings();
     renderActivityNavigation();
     renderCustomActivityPages();
+    renderPersonalityCharts();
     renderWorkTimer();
 
     const openTasks = state.tasks.filter((task) => task.status !== "completed");
@@ -3177,6 +3547,7 @@
     elements.researchPage.hidden = state.sidebarView !== "research" || !getActivityById("research");
     elements.creationPage.hidden = state.sidebarView !== "creation" || !getActivityById("creation");
     elements.hobbyPage.hidden = state.sidebarView !== "hobby" || !getActivityById("hobby");
+    elements.personalityPage.hidden = state.sidebarView !== "personality" || !getActivityById("personality");
     elements.customActivityPages.querySelectorAll("[data-page-view]").forEach((page) => {
       page.hidden = page.dataset.pageView !== state.sidebarView;
     });
@@ -4246,6 +4617,7 @@
     elements.appSettingsMenu.addEventListener("click", handleAppSettingsClick);
     elements.addActivityButton.addEventListener("click", addCustomActivity);
     elements.addTagButton.addEventListener("click", addCustomTag);
+    elements.addPersonalityAxisButton.addEventListener("click", addPersonalityAxis);
     elements.resetAppSettingsButton.addEventListener("click", resetAppSettings);
     elements.addNoteButton.addEventListener("click", () => openNoteModal());
     window.addEventListener("hashchange", syncPageFromLocation);
@@ -4386,6 +4758,11 @@
       });
     });
     elements.appShell.addEventListener("click", (event) => {
+      const personalityAction = event.target.closest("[data-personality-action]");
+      if (personalityAction?.dataset.personalityAction === "open-settings") {
+        openAppSettings();
+        return;
+      }
       const addButton = event.target.closest("[data-activity-task-add]");
       if (addButton) {
         openTaskModal(null, { activityId: addButton.dataset.activityTaskAdd });
