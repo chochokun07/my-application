@@ -4617,7 +4617,7 @@
     elements.appSettingsMenu.addEventListener("click", handleAppSettingsClick);
     elements.addActivityButton.addEventListener("click", addCustomActivity);
     elements.addTagButton.addEventListener("click", addCustomTag);
-    elements.addPersonalityAxisButton.addEventListener("click", addPersonalityAxis);
+    elements.addPersonalityAxisButton?.addEventListener("click", addPersonalityAxis);
     elements.resetAppSettingsButton.addEventListener("click", resetAppSettings);
     elements.addNoteButton.addEventListener("click", () => openNoteModal());
     window.addEventListener("hashchange", syncPageFromLocation);
