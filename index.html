@@ -63,6 +63,11 @@
           <span id="todoNavLabel" class="sidebar-nav-label">To Do</span>
           <span id="sidebarTodoCount" class="sidebar-nav-count">0</span>
         </button>
+        <button class="sidebar-nav-item" type="button" data-sidebar-view="notes">
+          <span class="sidebar-nav-icon" aria-hidden="true">▤</span>
+          <span class="sidebar-nav-label">ノート</span>
+          <span id="sidebarNoteCount" class="sidebar-nav-count">0</span>
+        </button>
 
         <p class="sidebar-section-label">活動</p>
         <div id="activityNavList" class="sidebar-activity-list"></div>
@@ -184,6 +189,37 @@
         <p class="keyboard-hint"><kbd>N</kbd> 新規タスク　<kbd>/</kbd> 検索</p>
       </div>
 
+
+      <section id="notesPage" class="page-view notes-page" data-page-view="notes" hidden aria-labelledby="notesPageTitle">
+        <div class="page-heading">
+          <div>
+            <p class="section-kicker">KNOWLEDGE NOTES</p>
+            <h1 id="notesPageTitle">ノート</h1>
+            <p class="page-subtitle">各活動で得た知見を、同じノートとしてまとめて管理します。</p>
+          </div>
+          <button id="addNoteButton" class="primary-button" type="button"><span class="button-plus">＋</span><span>ノートを追加</span></button>
+        </div>
+
+        <section class="notes-panel" aria-label="ノート一覧">
+          <div class="notes-toolbar">
+            <div id="notesFilterList" class="notes-filter-list" role="tablist" aria-label="ノートの分類"></div>
+            <label class="notes-search-box">
+              <span class="sr-only">ノートを検索</span>
+              <span class="search-icon">⌕</span>
+              <input id="notesSearch" type="search" placeholder="ノートを検索" autocomplete="off" />
+            </label>
+          </div>
+          <div id="notesDataNotice" class="notes-data-notice" hidden role="status"></div>
+          <div id="notesList" class="notes-grid" aria-live="polite"></div>
+          <div id="notesEmpty" class="notes-empty" hidden>
+            <span class="research-empty-mark" aria-hidden="true">▤</span>
+            <h2>ノートはまだありません</h2>
+            <p>活動で得た知見や、あとで見返したいことを登録できます。</p>
+            <button class="secondary-button" type="button" data-note-action="add">＋ ノートを追加</button>
+          </div>
+        </section>
+      </section>
+
       <section id="researchPage" class="page-view research-page" data-page-view="research" hidden aria-labelledby="researchPageTitle">
         <div class="page-heading research-page-heading">
           <div>
@@ -265,6 +301,25 @@
             <span class="summary-caption">メインのTo Doと共通</span>
           </article>
         </div>
+
+
+        <section class="research-panel activity-notes-panel" data-notes-activity="research" aria-labelledby="researchNotesTitle">
+          <div class="research-panel-heading activity-notes-heading">
+            <div>
+              <p class="section-kicker">NOTES</p>
+              <h2 id="researchNotesTitle">研究ノート</h2>
+              <p>研究で得られた知見をまとめます。メインのノート一覧からも開けます。</p>
+            </div>
+            <button class="secondary-button" type="button" data-note-action="add" data-note-activity="research">＋ ノートを追加</button>
+          </div>
+          <p class="notes-panel-notice" data-notes-notice hidden></p>
+          <div class="notes-grid notes-activity-grid" data-notes-list="research"></div>
+          <div class="notes-empty" data-notes-empty hidden>
+            <span class="research-empty-mark" aria-hidden="true">⌁</span>
+            <p data-notes-empty-text>研究ノートはまだありません。</p>
+            <button class="text-button" type="button" data-note-action="add" data-note-activity="research">研究ノートを追加</button>
+          </div>
+        </section>
 
         <div id="researchDataNotice" class="research-data-notice" hidden>
           <span class="setup-icon">i</span>
@@ -348,6 +403,25 @@
           <span class="setup-icon">i</span>
           <span id="hobbyDataNoticeText"></span>
         </div>
+
+
+        <section class="research-panel activity-notes-panel" data-notes-activity="hobby" aria-labelledby="hobbyNotesTitle">
+          <div class="research-panel-heading activity-notes-heading">
+            <div>
+              <p class="section-kicker">NOTES</p>
+              <h2 id="hobbyNotesTitle">趣味ノート</h2>
+              <p>趣味で得た知見や、動画制作に活かしたいことをまとめます。</p>
+            </div>
+            <button class="secondary-button" type="button" data-note-action="add" data-note-activity="hobby">＋ ノートを追加</button>
+          </div>
+          <p class="notes-panel-notice" data-notes-notice hidden></p>
+          <div class="notes-grid notes-activity-grid" data-notes-list="hobby"></div>
+          <div class="notes-empty" data-notes-empty hidden>
+            <span class="research-empty-mark" aria-hidden="true">✦</span>
+            <p data-notes-empty-text>趣味ノートはまだありません。</p>
+            <button class="text-button" type="button" data-note-action="add" data-note-activity="hobby">趣味ノートを追加</button>
+          </div>
+        </section>
 
         <div class="hobby-project-layout">
           <aside class="hobby-project-panel" aria-label="動画プロジェクト一覧">
@@ -542,6 +616,25 @@
         <div class="blank-page-panel" aria-label="創作ページの内容">
           <div class="blank-page-mark" aria-hidden="true">✎</div>
         </div>
+
+        <section class="research-panel activity-notes-panel" data-notes-activity="creation" aria-labelledby="creationNotesTitle">
+          <div class="research-panel-heading activity-notes-heading">
+            <div>
+              <p class="section-kicker">NOTES</p>
+              <h2 id="creationNotesTitle">創作ノート</h2>
+              <p>創作で得た気づきや設定をまとめます。</p>
+            </div>
+            <button class="secondary-button" type="button" data-note-action="add" data-note-activity="creation">＋ ノートを追加</button>
+          </div>
+          <p class="notes-panel-notice" data-notes-notice hidden></p>
+          <div class="notes-grid notes-activity-grid" data-notes-list="creation"></div>
+          <div class="notes-empty" data-notes-empty hidden>
+            <span class="research-empty-mark" aria-hidden="true">✎</span>
+            <p data-notes-empty-text>創作ノートはまだありません。</p>
+            <button class="text-button" type="button" data-note-action="add" data-note-activity="creation">創作ノートを追加</button>
+          </div>
+        </section>
+
         <section class="research-panel activity-task-panel" aria-labelledby="creationTaskTitle">
           <div class="research-panel-heading activity-tasks-heading">
             <div>
@@ -1244,6 +1337,43 @@
           <button class="secondary-button" type="button" data-research-bridge-close>閉じる</button>
           <button id="researchSolCreatePacketButton" class="primary-button" type="button">Research Packetを作成（Luna）</button>
         </div>
+      </section>
+    </div>
+
+
+    <div id="noteModal" class="modal-backdrop" hidden>
+      <section class="research-modal note-modal" role="dialog" aria-modal="true" aria-labelledby="noteModalTitle">
+        <div class="modal-header">
+          <div>
+            <p class="section-kicker">KNOWLEDGE NOTE</p>
+            <h2 id="noteModalTitle">ノートを追加</h2>
+            <p class="note-modal-description">あとで見返す知見を、活動と一緒に保存します。</p>
+          </div>
+          <button id="closeNoteModal" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
+        </div>
+        <form id="noteForm" class="research-form note-form">
+          <input id="noteId" type="hidden" />
+          <label class="field-span-2">
+            タイトル
+            <input id="noteTitle" type="text" maxlength="120" required placeholder="例：粉体のUV-Vis測定では積分球が必要" />
+          </label>
+          <label>
+            所属
+            <select id="noteActivity">
+              <option value="">未分類</option>
+            </select>
+          </label>
+          <label class="field-span-2">
+            内容
+            <textarea id="noteBody" maxlength="30000" rows="16" placeholder="得られた知見、理由、今後の判断材料などをまとめます。"></textarea>
+          </label>
+          <div class="modal-actions field-span-2">
+            <button id="deleteNoteButton" class="danger-button" type="button" hidden>削除</button>
+            <span class="action-spacer"></span>
+            <button id="cancelNoteButton" class="secondary-button" type="button">キャンセル</button>
+            <button id="saveNoteButton" class="primary-button" type="submit">保存</button>
+          </div>
+        </form>
       </section>
     </div>
 

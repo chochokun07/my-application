@@ -14,21 +14,24 @@
   const RESEARCH_PLANS_STORAGE_KEY = "my-application.research-plans.v0.1";
   const RESEARCH_SCHEDULES_STORAGE_KEY = "my-application.research-schedules.v0.1";
   const RESEARCH_SCHEDULE_HORIZON_STORAGE_KEY = "my-application.research-schedule-horizon.v0.1";
+  const NOTES_STORAGE_KEY = "my-application.notes.v0.1";
   const LOCAL_MODE_KEY = "my-application.local-mode";
   const TABLE_NAME = "tasks";
   const WORK_EVENTS_TABLE = "work_events";
   const RESEARCH_PLANS_TABLE = "research_plans";
   const RESEARCH_SCHEDULES_TABLE = "research_schedules";
+  const NOTES_TABLE = "notes";
   const TASK_SELECT_FIELDS = "id, title, memo, research_report, status, due_date, priority, tags, is_research, research_plan_id, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
   const LEGACY_TASK_SELECT_FIELDS = "id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
   const PLAN_SELECT_FIELDS = "id, title, objective, origin_facts, hypothesis, hypothesis_basis, status, target_date, next_action, notes, created_at, updated_at";
   const LEGACY_PLAN_SELECT_FIELDS = "id, title, objective, status, target_date, next_action, notes, created_at, updated_at";
   const SCHEDULE_SELECT_FIELDS = "id, title, scheduled_at, kind, plan_id, notes, created_at, updated_at";
+  const NOTE_SELECT_FIELDS = "id, title, body, activity_id, tags, created_at, updated_at";
   const WORK_EVENT_SELECT_FIELDS = "id, user_id, event_type, occurred_at, created_at, activity_id, metadata";
   const WORK_EVENT_TYPES = new Set(["start", "break_start", "break_end", "end"]);
   const config = window.__MY_APP_CONFIG__ || {};
   const hasRemoteConfig = Boolean(config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
-  const CORE_PAGE_VIEWS = new Set(["home", "todo"]);
+  const CORE_PAGE_VIEWS = new Set(["home", "todo", "notes"]);
   const BUILTIN_ACTIVITY_IDS = new Set(["hobby", "research", "creation"]);
   const DEFAULT_APP_SETTINGS = Object.freeze({
     appName: "My application",
@@ -63,6 +66,11 @@
     mode: supabaseClient ? "remote" : "local",
     user: null,
     tasks: [],
+    notes: [],
+    notesRemoteAvailable: true,
+    notesDataError: "",
+    notesFilter: "all",
+    notesSearch: "",
     workEvents: [],
     workRemoteAvailable: true,
     workEventsLoaded: false,
@@ -84,6 +92,7 @@
     search: "",
     authMode: "login",
     editingTaskId: null,
+    editingNoteId: null,
     editingPlanId: null,
     editingScheduleId: null,
     editingResearchTaskId: null,
@@ -107,6 +116,7 @@
   const elements = {
     appShell: $("appShell"),
     todoPage: $("todoPage"),
+    notesPage: $("notesPage"),
     researchPage: $("researchPage"),
     creationPage: $("creationPage"),
     hobbyPage: $("hobbyPage"),
@@ -198,6 +208,12 @@
     emptyState: $("emptyState"),
     emptyTitle: $("emptyTitle"),
     emptyDescription: $("emptyDescription"),
+    notesFilterList: $("notesFilterList"),
+    notesSearch: $("notesSearch"),
+    notesDataNotice: $("notesDataNotice"),
+    notesList: $("notesList"),
+    notesEmpty: $("notesEmpty"),
+    sidebarNoteCount: $("sidebarNoteCount"),
     authForm: $("authForm"),
     authEmail: $("authEmail"),
     authPassword: $("authPassword"),
@@ -207,6 +223,17 @@
     useLocalButton: $("useLocalButton"),
     openAuthButton: $("openAuthButton"),
     taskModal: $("taskModal"),
+    noteModal: $("noteModal"),
+    noteModalTitle: $("noteModalTitle"),
+    noteForm: $("noteForm"),
+    noteId: $("noteId"),
+    noteTitle: $("noteTitle"),
+    noteActivity: $("noteActivity"),
+    noteBody: $("noteBody"),
+    deleteNoteButton: $("deleteNoteButton"),
+    closeNoteModal: $("closeNoteModal"),
+    cancelNoteButton: $("cancelNoteButton"),
+    saveNoteButton: $("saveNoteButton"),
     taskModalTitle: $("taskModalTitle"),
     taskForm: $("taskForm"),
     taskId: $("taskId"),
@@ -524,6 +551,30 @@
     };
   }
 
+
+  function normalizeNote(note = {}) {
+    return {
+      id: note.id || createId(),
+      title: String(note.title || "").trim().slice(0, 120),
+      body: String(note.body ?? "").slice(0, 30000),
+      activityId: String(note.activity_id ?? note.activityId ?? "").trim(),
+      tags: normalizeTags(note.tags),
+      createdAt: note.created_at ?? note.createdAt ?? new Date().toISOString(),
+      updatedAt: note.updated_at ?? note.updatedAt ?? new Date().toISOString(),
+    };
+  }
+
+  function toNoteDatabasePayload(note) {
+    return {
+      title: note.title,
+      body: note.body || "",
+      activity_id: note.activityId || null,
+      tags: note.tags,
+      updated_at: note.updatedAt,
+      user_id: state.user.id,
+    };
+  }
+
   function toPlanDatabasePayload(plan) {
     const payload = {
       title: plan.title,
@@ -583,6 +634,21 @@
   function writeLocalResearchData() {
     localStorage.setItem(RESEARCH_PLANS_STORAGE_KEY, JSON.stringify(state.plans));
     localStorage.setItem(RESEARCH_SCHEDULES_STORAGE_KEY, JSON.stringify(state.schedules));
+  }
+
+
+  function readLocalNotes() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || "[]");
+      return Array.isArray(saved) ? saved.map(normalizeNote).filter((note) => note.title) : [];
+    } catch (error) {
+      console.warn("ローカルノートの読み込みに失敗しました", error);
+      return [];
+    }
+  }
+
+  function writeLocalNotes() {
+    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(state.notes));
   }
 
   function getWorkStorageScope() {
@@ -2121,9 +2187,27 @@
                 <p class="page-subtitle">${escapeHtml(activity.description || "この活動の内容をここで整理します。")}</p>
               </div>
             </div>
+
             <div class="blank-page-panel" aria-label="${escapeHtml(activity.label)}の内容">
               <div class="blank-page-mark" aria-hidden="true">${escapeHtml(activity.icon)}</div>
             </div>
+            <section class="research-panel activity-notes-panel" data-notes-activity="${escapeHtml(activity.id)}" aria-labelledby="${escapeHtml(titleId)}">
+              <div class="research-panel-heading activity-notes-heading">
+                <div>
+                  <p class="section-kicker">NOTES</p>
+                  <h2 id="${escapeHtml(titleId)}">${taskLabel}ノート</h2>
+                  <p>${taskLabel}の知見や気づきをまとめます。メインのノート一覧からも開けます。</p>
+                </div>
+                <button class="secondary-button" type="button" data-note-action="add" data-note-activity="${escapeHtml(activity.id)}">＋ ノートを追加</button>
+              </div>
+              <p class="notes-panel-notice" data-notes-notice hidden></p>
+              <div class="notes-grid notes-activity-grid" data-notes-list="${escapeHtml(activity.id)}"></div>
+              <div class="notes-empty" data-notes-empty hidden>
+                <span class="research-empty-mark" aria-hidden="true">${escapeHtml(activity.icon)}</span>
+                <p data-notes-empty-text>${taskLabel}ノートはまだありません。</p>
+                <button class="text-button" type="button" data-note-action="add" data-note-activity="${escapeHtml(activity.id)}">${taskLabel}ノートを追加</button>
+              </div>
+            </section>
             <section class="research-panel activity-task-panel" aria-labelledby="${escapeHtml(taskTitleId)}">
               <div class="research-panel-heading activity-tasks-heading">
                 <div>
@@ -2430,6 +2514,9 @@
     state.view = "today";
     state.search = "";
     elements.searchInput.value = "";
+    state.notesFilter = "all";
+    state.notesSearch = "";
+    if (elements.notesSearch) elements.notesSearch.value = "";
   }
 
   function navigateToPage(view) {
@@ -2529,6 +2616,20 @@
 
   function researchSetupMessage() {
     return "研究データを同期するには、最新のsupabase/schema.sqlをSupabaseのSQL Editorで実行してください。";
+  }
+
+
+  function isMissingNotesTable(error) {
+    const message = [error?.message || "", error?.details || "", error?.hint || ""].join(" ").toLowerCase();
+    return message.includes("notes") && (
+      message.includes("relation") ||
+      message.includes("schema cache") ||
+      message.includes("does not exist")
+    );
+  }
+
+  function notesSetupMessage() {
+    return "ノートを同期するには、最新のsupabase/schema.sqlをSupabaseのSQL Editorで実行してください。";
   }
 
   function isOverdue(task) {
@@ -2862,6 +2963,135 @@
     });
   }
 
+
+  function getNoteActivity(note) {
+    return note?.activityId ? getActivityById(note.activityId) : null;
+  }
+
+  function getNoteActivityLabel(note) {
+    return getNoteActivity(note)?.label || "未分類";
+  }
+
+  function formatNoteUpdatedAt(value) {
+    return formatDateTime(value) || "更新日時不明";
+  }
+
+  function getNoteSearchText(note) {
+    const activity = getNoteActivity(note);
+    return [
+      note.title,
+      note.body,
+      ...(note.tags || []),
+      activity?.label || "",
+    ].join(" ").toLocaleLowerCase("ja-JP");
+  }
+
+  function renderNoteCard(note) {
+    const excerpt = String(note.body || "").replace(/\s+/g, " ").trim().slice(0, 180);
+    const tags = normalizeTags(note.tags);
+    const tagHtml = tags.length
+      ? `<div class="note-card-tags">${tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag)}`).join("")}</div>`
+      : "";
+    return `
+      <article class="note-card" data-note-id="${escapeHtml(note.id)}" tabindex="0" role="button">
+        <div class="note-card-topline">
+          <span class="note-activity-chip">${escapeHtml(getNoteActivityLabel(note))}</span>
+          <time datetime="${escapeHtml(note.updatedAt)}">${escapeHtml(formatNoteUpdatedAt(note.updatedAt))}</time>
+        </div>
+        <h3>${escapeHtml(note.title)}</h3>
+        <p class="note-card-excerpt">${escapeHtml(excerpt || "本文はまだありません。")}</p>
+        ${tagHtml}
+        <div class="note-card-actions">
+          <button class="task-action" type="button" data-note-action="edit">編集</button>
+          <button class="task-action delete" type="button" data-note-action="delete">削除</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderNoteCollection(listElement, emptyElement, notes, emptyMessage = "ノートはまだありません。") {
+    if (!listElement || !emptyElement) return;
+    listElement.innerHTML = notes.map(renderNoteCard).join("");
+    listElement.hidden = notes.length === 0;
+    emptyElement.hidden = notes.length !== 0;
+    const messageElement = emptyElement.querySelector("[data-notes-empty-text]");
+    if (messageElement) messageElement.textContent = emptyMessage;
+  }
+
+  function renderNotesFilterList() {
+    if (!elements.notesFilterList) return;
+    const activities = state.appSettings?.activities || [];
+    const filters = [
+      { id: "all", label: "すべて" },
+      ...activities.map((activity) => ({ id: activity.id, label: activity.label })),
+      { id: "none", label: "未分類" },
+    ];
+    if (!filters.some((filter) => filter.id === state.notesFilter)) state.notesFilter = "all";
+    elements.notesFilterList.innerHTML = filters.map((filter) => {
+      const count = filter.id === "all"
+        ? state.notes.length
+        : state.notes.filter((note) => filter.id === "none" ? !note.activityId : note.activityId === filter.id).length;
+      return `
+        <button class="notes-filter-button${state.notesFilter === filter.id ? " is-active" : ""}" type="button" role="tab" aria-selected="${state.notesFilter === filter.id}" data-note-filter="${escapeHtml(filter.id)}">
+          <span>${escapeHtml(filter.label)}</span>
+          <strong>${count}</strong>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function getVisibleNotes() {
+    const query = String(state.notesSearch || "").trim().toLocaleLowerCase("ja-JP");
+    return [...state.notes]
+      .filter((note) => {
+        if (state.notesFilter === "none") return !note.activityId;
+        if (state.notesFilter !== "all") return note.activityId === state.notesFilter;
+        return true;
+      })
+      .filter((note) => !query || getNoteSearchText(note).includes(query))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+
+  function renderActivityNotes() {
+    document.querySelectorAll("[data-notes-list]").forEach((listElement) => {
+      const panel = listElement.closest("[data-notes-activity]");
+      const activityId = listElement.dataset.notesList;
+      const activity = getActivityById(activityId);
+      const notes = activity
+        ? [...state.notes]
+          .filter((note) => note.activityId === activityId)
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        : [];
+      const emptyElement = panel?.querySelector("[data-notes-empty]");
+      renderNoteCollection(listElement, emptyElement, notes, (activity?.label || "この活動") + "ノートはまだありません。");
+      const notice = panel?.querySelector("[data-notes-notice]");
+      if (notice) {
+        notice.hidden = !state.notesDataError;
+        notice.textContent = state.notesDataError
+          ? state.notesDataError + " 現在のノートはこの端末に保存します。"
+          : "";
+      }
+    });
+  }
+
+  function renderNotes() {
+    if (elements.sidebarNoteCount) elements.sidebarNoteCount.textContent = String(state.notes.length);
+    renderNotesFilterList();
+    if (elements.notesDataNotice) {
+      elements.notesDataNotice.hidden = !state.notesDataError;
+      elements.notesDataNotice.textContent = state.notesDataError
+        ? state.notesDataError + " 現在のノートはこの端末に保存します。"
+        : "";
+    }
+    renderNoteCollection(
+      elements.notesList,
+      elements.notesEmpty,
+      getVisibleNotes(),
+      state.notesSearch.trim() ? "検索条件に一致するノートはありません。" : "ノートはまだありません。"
+    );
+    renderActivityNotes();
+  }
+
   function renderResearch() {
     const openPlans = state.plans.filter((plan) => plan.status !== "completed");
     const now = Date.now();
@@ -2943,6 +3173,7 @@
 
     const isTodoPage = state.sidebarView === "home" || state.sidebarView === "todo";
     elements.todoPage.hidden = !isTodoPage;
+    elements.notesPage.hidden = state.sidebarView !== "notes";
     elements.researchPage.hidden = state.sidebarView !== "research" || !getActivityById("research");
     elements.creationPage.hidden = state.sidebarView !== "creation" || !getActivityById("creation");
     elements.hobbyPage.hidden = state.sidebarView !== "hobby" || !getActivityById("hobby");
@@ -2961,6 +3192,7 @@
     elements.taskList.innerHTML = visibleTasks.map(renderTask).join("");
     elements.taskList.hidden = visibleTasks.length === 0;
     elements.emptyState.hidden = visibleTasks.length !== 0;
+    renderNotes();
     renderResearch();
     if (elements.workLogModal && !elements.workLogModal.hidden) renderWorkLog();
     if (elements.workRecordEditorModal && !elements.workRecordEditorModal.hidden) renderWorkRecordEditor();
@@ -2978,6 +3210,26 @@
       elements.emptyTitle.textContent = "今日のタスクはありません";
       elements.emptyDescription.textContent = "今取り組むことを登録すると、ここに表示されます。";
     }
+  }
+
+
+  async function loadRemoteNotes() {
+    try {
+      const result = await supabaseClient
+        .from(NOTES_TABLE)
+        .select(NOTE_SELECT_FIELDS)
+        .order("updated_at", { ascending: false });
+      if (result.error) throw result.error;
+      state.notes = (result.data || []).map(normalizeNote).filter((note) => note.title);
+      state.notesRemoteAvailable = true;
+      state.notesDataError = "";
+    } catch (error) {
+      if (!isMissingNotesTable(error)) throw error;
+      state.notes = readLocalNotes();
+      state.notesRemoteAvailable = false;
+      state.notesDataError = notesSetupMessage();
+    }
+    render();
   }
 
   async function loadRemoteTasks() {
@@ -3048,6 +3300,16 @@
     return result.data;
   }
 
+
+  async function runRemoteNoteMutation(note, operation) {
+    const query = operation === "update"
+      ? supabaseClient.from(NOTES_TABLE).update(toNoteDatabasePayload(note)).eq("id", note.id)
+      : supabaseClient.from(NOTES_TABLE).insert(toNoteDatabasePayload(note));
+    const result = await query.select(NOTE_SELECT_FIELDS).single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
   async function handleSession(session) {
     const previousUserId = state.user?.id || null;
     state.user = session?.user || null;
@@ -3057,6 +3319,9 @@
       state.workEventsLoadSequence += 1;
       state.workEventsRevision += 1;
       state.tasks = [];
+      state.notes = [];
+      state.notesRemoteAvailable = true;
+      state.notesDataError = "";
       state.plans = [];
       state.schedules = [];
       state.workEvents = [];
@@ -3080,7 +3345,7 @@
     elements.accountInitial.textContent = (state.user.email || "M").slice(0, 1).toUpperCase();
     elements.accountEmail.textContent = state.user.email || "ログイン中";
     elements.accountButton.hidden = false;
-    await Promise.all([loadRemoteTasks(), loadRemoteResearchData(), loadRemoteWorkEvents()]);
+    await Promise.all([loadRemoteTasks(), loadRemoteResearchData(), loadRemoteWorkEvents(), loadRemoteNotes()]);
     showApp();
   }
 
@@ -3625,6 +3890,149 @@
     }
   }
 
+
+  function updateNoteActivityOptions(selectedActivityId = "") {
+    if (!elements.noteActivity) return;
+    const options = [
+      { id: "", label: "未分類" },
+      ...(state.appSettings?.activities || []).map((activity) => ({ id: activity.id, label: activity.label })),
+    ];
+    elements.noteActivity.innerHTML = options.map((option) => {
+      const selected = option.id === selectedActivityId ? " selected" : "";
+      return `<option value="${escapeHtml(option.id)}"${selected}>${escapeHtml(option.label)}</option>`;
+    }).join("");
+    elements.noteActivity.value = options.some((option) => option.id === selectedActivityId)
+      ? selectedActivityId
+      : "";
+  }
+
+  function openNoteModal(note = null, options = {}) {
+    state.editingNoteId = note?.id || null;
+    elements.noteModalTitle.textContent = note ? "ノートを編集" : "ノートを追加";
+    elements.deleteNoteButton.hidden = !note;
+    elements.noteId.value = note?.id || "";
+    elements.noteTitle.value = note?.title || "";
+    const defaultActivityId = note?.activityId
+      || options.activityId
+      || (getActivityById(state.sidebarView)?.id || "");
+    updateNoteActivityOptions(defaultActivityId);
+    elements.noteBody.value = note?.body || "";
+    elements.noteModal.hidden = false;
+    document.body.classList.add("modal-open");
+    window.setTimeout(() => elements.noteTitle.focus(), 40);
+  }
+
+  function closeNoteModal() {
+    elements.noteModal.hidden = true;
+    state.editingNoteId = null;
+    elements.noteForm.reset();
+    const hasOpenModal = [
+      elements.appSettingsMenu,
+      elements.workLogModal,
+      elements.workContextModal,
+      elements.workCorrectionModal,
+      elements.workRecordEditorModal,
+      elements.taskModal,
+      elements.researchPlanModal,
+      elements.researchScheduleModal,
+      elements.researchPlanDetailModal,
+      elements.researchTaskDetailModal,
+      elements.noteModal,
+    ].some((element) => element && !element.hidden);
+    if (!hasOpenModal) document.body.classList.remove("modal-open");
+  }
+
+  function getNoteFromForm() {
+    const existing = state.notes.find((note) => note.id === state.editingNoteId);
+    return normalizeNote({
+      id: state.editingNoteId || createId(),
+      title: elements.noteTitle.value.trim(),
+      body: elements.noteBody.value,
+      activityId: elements.noteActivity.value || "",
+      tags: existing?.tags || [],
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function upsertLocalNote(note) {
+    const index = state.notes.findIndex((item) => item.id === note.id);
+    if (index >= 0) state.notes[index] = note;
+    else state.notes.unshift(note);
+    writeLocalNotes();
+  }
+
+  async function saveNote(event) {
+    event.preventDefault();
+    if (!elements.noteForm.reportValidity()) return;
+    const note = getNoteFromForm();
+    const isEditing = Boolean(state.editingNoteId);
+    const saveButton = elements.saveNoteButton;
+    saveButton.disabled = true;
+
+    try {
+      if (state.mode === "local" || !state.notesRemoteAvailable) {
+        upsertLocalNote(note);
+        setSyncStatus("この端末のみ", "local");
+      } else {
+        const data = await runRemoteNoteMutation(note, isEditing ? "update" : "insert");
+        const savedNote = normalizeNote(data);
+        const index = state.notes.findIndex((item) => item.id === savedNote.id);
+        if (index >= 0) state.notes[index] = savedNote;
+        else state.notes.unshift(savedNote);
+        setSyncStatus("同期済み", "synced");
+      }
+      closeNoteModal();
+      render();
+      showToast(isEditing ? "ノートを更新しました" : "ノートを追加しました");
+    } catch (error) {
+      if (state.mode === "remote" && isMissingNotesTable(error)) {
+        state.notesRemoteAvailable = false;
+        state.notesDataError = notesSetupMessage();
+        upsertLocalNote(note);
+        closeNoteModal();
+        render();
+        showToast("ノートの同期設定前のため、この端末に保存しました。", true);
+      } else {
+        showToast(toFriendlyError(error), true);
+      }
+    } finally {
+      saveButton.disabled = false;
+    }
+  }
+
+  async function deleteNote(noteId, askForConfirmation = true) {
+    const note = state.notes.find((item) => item.id === noteId);
+    if (!note) return;
+    if (askForConfirmation && !window.confirm("「" + note.title + "」を削除しますか？")) return;
+
+    try {
+      if (state.mode === "local" || !state.notesRemoteAvailable) {
+        state.notes = state.notes.filter((item) => item.id !== noteId);
+        writeLocalNotes();
+      } else {
+        const { error } = await supabaseClient.from(NOTES_TABLE).delete().eq("id", noteId);
+        if (error) throw error;
+        state.notes = state.notes.filter((item) => item.id !== noteId);
+      }
+      if (state.editingNoteId === noteId) closeNoteModal();
+      render();
+      showToast("ノートを削除しました");
+    } catch (error) {
+      if (state.mode === "remote" && isMissingNotesTable(error)) {
+        state.notesRemoteAvailable = false;
+        state.notesDataError = notesSetupMessage();
+        state.notes = state.notes.filter((item) => item.id !== noteId);
+        writeLocalNotes();
+        if (state.editingNoteId === noteId) closeNoteModal();
+        render();
+        showToast("ノートの同期設定前のため、この端末から削除しました。", true);
+      } else {
+        showToast(toFriendlyError(error), true);
+      }
+    }
+  }
+
   function openTaskModal(task = null, options = {}) {
     state.editingTaskId = task?.id || null;
     elements.taskModalTitle.textContent = task ? "タスクを編集" : "タスクを追加";
@@ -3671,6 +4079,7 @@
     if (message.includes("Invalid login credentials")) return "メールアドレスまたはパスワードが正しくありません。";
     if (message.includes("User already registered")) return "このメールアドレスはすでに登録されています。";
     if (message.includes("work_events")) return "作業記録を同期できません。supabase/schema.sqlのwork_events定義を確認してください。";
+    if (message.includes("notes")) return notesSetupMessage();
     if (message.includes("research_plans") || message.includes("research_schedules") || message.includes("research_plan_id") || message.includes("is_research")) return researchSetupMessage();
     if (message.includes("relation") && message.includes("does not exist")) return "Supabaseにtasksテーブルがありません。READMEのSQLを実行してください。";
     if (message.includes("Failed to fetch")) return "通信に失敗しました。接続を確認してください。";
@@ -3683,6 +4092,9 @@
     state.appSettings = readAppSettings();
     activeAppSettings = state.appSettings;
     state.tasks = readLocalTasks();
+    state.notes = readLocalNotes();
+    state.notesRemoteAvailable = true;
+    state.notesDataError = "";
     state.plans = readLocalCollection(RESEARCH_PLANS_STORAGE_KEY, normalizePlan);
     state.schedules = readLocalCollection(RESEARCH_SCHEDULES_STORAGE_KEY, normalizeSchedule);
     state.workEvents = readLocalWorkEvents();
@@ -3715,6 +4127,39 @@
     showAuth();
   }
 
+
+  function handleNotesClick(event) {
+    const filterTarget = event.target.closest("[data-note-filter]");
+    if (filterTarget) {
+      state.notesFilter = filterTarget.dataset.noteFilter || "all";
+      render();
+      return true;
+    }
+
+    const actionTarget = event.target.closest("[data-note-action]");
+    if (actionTarget) {
+      const action = actionTarget.dataset.noteAction;
+      if (action === "add") {
+        openNoteModal(null, { activityId: actionTarget.dataset.noteActivity || "" });
+      } else {
+        const card = actionTarget.closest("[data-note-id]");
+        const note = state.notes.find((item) => item.id === card?.dataset.noteId);
+        if (!note) return true;
+        if (action === "delete") deleteNote(note.id);
+        else if (action === "edit" || action === "open") openNoteModal(note);
+      }
+      return true;
+    }
+
+    const card = event.target.closest("[data-note-id]");
+    if (card && !event.target.closest("button, a, input, textarea, select")) {
+      const note = state.notes.find((item) => item.id === card.dataset.noteId);
+      if (note) openNoteModal(note);
+      return true;
+    }
+    return false;
+  }
+
   function handleTaskListClick(event) {
     const target = event.target.closest("[data-action]");
     const card = event.target.closest("[data-task-id]");
@@ -3731,8 +4176,15 @@
   }
 
   function handleTaskListKeydown(event) {
+    const noteCard = event.target.closest("[data-note-id]");
+    if (noteCard && event.target === noteCard && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      const note = state.notes.find((item) => item.id === noteCard.dataset.noteId);
+      if (note) openNoteModal(note);
+      return;
+    }
     const target = event.target.closest('[data-action="edit"]');
-    if (target && (event.key === "Enter" || event.key === " ")) {
+    if (target && (event.key === "Enter" || event.key === " ") ) {
       event.preventDefault();
       const card = target.closest("[data-task-id]");
       const task = state.tasks.find((item) => item.id === card?.dataset.taskId);
@@ -3795,6 +4247,7 @@
     elements.addActivityButton.addEventListener("click", addCustomActivity);
     elements.addTagButton.addEventListener("click", addCustomTag);
     elements.resetAppSettingsButton.addEventListener("click", resetAppSettings);
+    elements.addNoteButton.addEventListener("click", () => openNoteModal());
     window.addEventListener("hashchange", syncPageFromLocation);
     window.addEventListener("popstate", syncPageFromLocation);
     elements.workStartButton.addEventListener("click", () => recordWorkAction("start"));
@@ -3856,6 +4309,13 @@
     elements.openAuthButton.addEventListener("click", enterSyncMode);
     elements.closeTaskModal.addEventListener("click", closeTaskModal);
     elements.cancelTaskButton.addEventListener("click", closeTaskModal);
+    elements.noteForm.addEventListener("submit", saveNote);
+    elements.closeNoteModal.addEventListener("click", closeNoteModal);
+    elements.cancelNoteButton.addEventListener("click", closeNoteModal);
+    elements.deleteNoteButton.addEventListener("click", () => deleteNote(state.editingNoteId));
+    elements.noteModal.addEventListener("click", (event) => {
+      if (event.target === elements.noteModal) closeNoteModal();
+    });
     elements.taskForm.addEventListener("submit", saveTask);
     elements.taskReminderEnabled.addEventListener("change", async (event) => {
       if (!event.target.checked) return;
@@ -3915,6 +4375,10 @@
       state.search = event.target.value;
       render();
     });
+    elements.notesSearch.addEventListener("input", (event) => {
+      state.notesSearch = event.target.value;
+      render();
+    });
     document.querySelectorAll(".view-tab").forEach((tab) => {
       tab.addEventListener("click", () => {
         state.view = tab.dataset.view;
@@ -3927,6 +4391,7 @@
         openTaskModal(null, { activityId: addButton.dataset.activityTaskAdd });
         return;
       }
+      if (handleNotesClick(event)) return;
       handleTaskListClick(event);
     });
     elements.appShell.addEventListener("keydown", handleTaskListKeydown);
@@ -3944,6 +4409,7 @@
       else if (event.key === "Escape" && !elements.workCorrectionModal.hidden) closeWorkCorrectionModal();
       else if (event.key === "Escape" && !elements.workLogModal.hidden) closeWorkLogModal();
       else if (event.key === "Escape" && !elements.taskModal.hidden) closeTaskModal();
+      else if (event.key === "Escape" && !elements.noteModal.hidden) closeNoteModal();
       else if (event.key === "Escape" && !elements.researchPlanModal.hidden) closeResearchPlanModal();
       else if (event.key === "Escape" && !elements.researchScheduleModal.hidden) closeResearchScheduleModal();
       else if (event.key === "Escape" && !elements.researchTaskDetailModal.hidden) closeResearchTaskDetail();

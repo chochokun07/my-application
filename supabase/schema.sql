@@ -506,3 +506,36 @@ drop trigger if exists research_packets_set_updated_at on public.research_packet
 create trigger research_packets_set_updated_at before update on public.research_packets for each row execute function public.set_hobby_updated_at();
 drop trigger if exists research_consultations_set_updated_at on public.research_consultations;
 create trigger research_consultations_set_updated_at before update on public.research_consultations for each row execute function public.set_hobby_updated_at();
+
+
+-- 共通ノート: 活動ページとメインのノート一覧から同じデータを参照
+create table if not exists public.notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null check (char_length(trim(title)) between 1 and 120),
+  body text not null default '',
+  activity_id text,
+  tags text[] not null default '{}',
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists notes_user_updated_at_idx
+  on public.notes (user_id, updated_at desc);
+
+create index if not exists notes_user_activity_idx
+  on public.notes (user_id, activity_id);
+
+alter table public.notes enable row level security;
+
+drop policy if exists "notes_select_own" on public.notes;
+create policy "notes_select_own" on public.notes for select using (auth.uid() = user_id);
+
+drop policy if exists "notes_insert_own" on public.notes;
+create policy "notes_insert_own" on public.notes for insert with check (auth.uid() = user_id);
+
+drop policy if exists "notes_update_own" on public.notes;
+create policy "notes_update_own" on public.notes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "notes_delete_own" on public.notes;
+create policy "notes_delete_own" on public.notes for delete using (auth.uid() = user_id);
