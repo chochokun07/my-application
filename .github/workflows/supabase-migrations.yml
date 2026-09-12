@@ -16,7 +16,6 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
     steps:
@@ -28,8 +27,7 @@ jobs:
         with:
           version: latest
 
-      - name: Link Supabase project
-        run: supabase link --project-ref "cxecdwseyesundvixfqq"
-
       - name: Apply migrations
-        run: supabase db push
+        run: |
+          encoded_password="$(node -e 'process.stdout.write(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')"
+          supabase db push --db-url "postgresql://postgres:${encoded_password}@db.cxecdwseyesundvixfqq.supabase.co:5432/postgres?sslmode=require"
