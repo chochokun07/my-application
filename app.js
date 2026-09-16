@@ -100,6 +100,7 @@
     appSettings: activeAppSettings,
     settingsDraft: null,
     taskTagDraft: [],
+    taskSort: "due",
     sidebarView: getPageViewFromLocation(),
     search: "",
     authMode: "login",
@@ -272,6 +273,7 @@
     taskTagInput: $("taskTagInput"),
     taskTagSuggestions: $("taskTagSuggestions"),
     taskResearchPlan: $("taskResearchPlan"),
+    taskSortSelect: $("taskSortSelect"),
     deleteTaskButton: $("deleteTaskButton"),
     closeTaskModal: $("closeTaskModal"),
     cancelTaskButton: $("cancelTaskButton"),
@@ -2753,8 +2755,10 @@
 
   function resetPageFilters() {
     state.view = "today";
+    state.taskSort = "due";
     state.search = "";
     elements.searchInput.value = "";
+    if (elements.taskSortSelect) elements.taskSortSelect.value = state.taskSort;
     state.notesFilter = "all";
     state.notesSearch = "";
     if (elements.notesSearch) elements.notesSearch.value = "";
@@ -2969,16 +2973,21 @@
     });
 
     return filtered.sort((a, b) => {
-      if (state.view === "completed") {
+      if (state.view === "completed" && state.taskSort === "due") {
         return new Date(b.completedAt || b.updatedAt).getTime() - new Date(a.completedAt || a.updatedAt).getTime();
       }
-      if (a.status === "in_progress" && b.status !== "in_progress") return -1;
-      if (b.status === "in_progress" && a.status !== "in_progress") return 1;
       const dueA = a.dueDate || "9999-12-31";
       const dueB = b.dueDate || "9999-12-31";
-      if (dueA !== dueB) return dueA.localeCompare(dueB);
       const priorityDifference = (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1);
-      if (priorityDifference !== 0) return priorityDifference;
+      if (state.taskSort === "priority") {
+        if (priorityDifference !== 0) return priorityDifference;
+        if (dueA !== dueB) return dueA.localeCompare(dueB);
+      } else {
+        if (a.status === "in_progress" && b.status !== "in_progress") return -1;
+        if (b.status === "in_progress" && a.status !== "in_progress") return 1;
+        if (dueA !== dueB) return dueA.localeCompare(dueB);
+        if (priorityDifference !== 0) return priorityDifference;
+      }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   }
@@ -4746,6 +4755,10 @@
     });
     elements.searchInput.addEventListener("input", (event) => {
       state.search = event.target.value;
+      render();
+    });
+    elements.taskSortSelect.addEventListener("change", (event) => {
+      state.taskSort = event.target.value === "priority" ? "priority" : "due";
       render();
     });
     elements.notesSearch.addEventListener("input", (event) => {

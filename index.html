@@ -169,6 +169,13 @@
               <button class="view-tab" type="button" data-view="all">すべて <span id="allTabCount">0</span></button>
               <button class="view-tab" type="button" data-view="completed">完了 <span id="completedTabCount">0</span></button>
             </nav>
+            <label class="task-sort-box">
+              <span>並び順</span>
+              <select id="taskSortSelect" aria-label="タスクの並び順">
+                <option value="due">期限順</option>
+                <option value="priority">優先度順</option>
+              </select>
+            </label>
             <label class="search-box">
               <span class="sr-only">タスクを検索</span>
               <span class="search-icon">⌕</span>

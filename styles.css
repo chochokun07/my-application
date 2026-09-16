@@ -1779,6 +1779,35 @@ p {
   color: var(--muted);
 }
 
+.task-sort-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(244, 241, 234, 0.56);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.task-sort-box:focus-within {
+  border-color: rgba(31, 61, 56, 0.35);
+  background: #fffdf8;
+}
+
+.task-sort-box select {
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
 .search-box:focus-within {
   border-color: rgba(31, 61, 56, 0.35);
   background: #fffdf8;
