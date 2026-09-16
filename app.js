@@ -2755,10 +2755,8 @@
 
   function resetPageFilters() {
     state.view = "today";
-    state.taskSort = "due";
     state.search = "";
     elements.searchInput.value = "";
-    if (elements.taskSortSelect) elements.taskSortSelect.value = state.taskSort;
     state.notesFilter = "all";
     state.notesSearch = "";
     if (elements.notesSearch) elements.notesSearch.value = "";
@@ -3177,8 +3175,16 @@
     return [...tasks].sort((a, b) => {
       if (a.status === "completed" && b.status !== "completed") return 1;
       if (b.status === "completed" && a.status !== "completed") return -1;
-      const dueDifference = (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31");
-      if (dueDifference !== 0) return dueDifference;
+      const dueA = a.dueDate || "9999-12-31";
+      const dueB = b.dueDate || "9999-12-31";
+      const priorityDifference = (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1);
+      if (state.taskSort === "priority") {
+        if (priorityDifference !== 0) return priorityDifference;
+        if (dueA !== dueB) return dueA.localeCompare(dueB);
+      } else {
+        if (dueA !== dueB) return dueA.localeCompare(dueB);
+        if (priorityDifference !== 0) return priorityDifference;
+      }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   }
