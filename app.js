@@ -382,6 +382,16 @@
     workRecordEditorSessions: $("workRecordEditorSessions"),
     closeWorkRecordEditor: $("closeWorkRecordEditor"),
     closeWorkRecordEditorButton: $("closeWorkRecordEditorButton"),
+    workRecordEditorAddButton: $("workRecordEditorAddButton"),
+    workRecordAddForm: $("workRecordAddForm"),
+    workRecordAddStart: $("workRecordAddStart"),
+    workRecordAddBreakStart: $("workRecordAddBreakStart"),
+    workRecordAddBreakEnd: $("workRecordAddBreakEnd"),
+    workRecordAddEnd: $("workRecordAddEnd"),
+    workRecordAddTask: $("workRecordAddTask"),
+    workRecordAddCategory: $("workRecordAddCategory"),
+    workRecordAddMemo: $("workRecordAddMemo"),
+    closeWorkRecordAddButton: $("closeWorkRecordAddButton"),
   };
 
   const STATUS_LABELS = {
@@ -1284,6 +1294,7 @@
     const source = event.metadata?.source;
     if (source === "button") return "操作";
     if (source === "manual_correction") return "手動修正";
+    if (source === "manual_add") return "手動追加";
     return "記録時不明";
   }
 
@@ -1384,7 +1395,10 @@
       session.events.forEach((event) => eventSessionIds.set(event.id, session.id));
     });
     if (elements.workLogEditDateButton) {
-      elements.workLogEditDateButton.disabled = selectedSessions.length === 0;
+      elements.workLogEditDateButton.disabled = false;
+      elements.workLogEditDateButton.textContent = selectedSessions.length
+        ? "この日の記録を編集"
+        : "この日に記録を追加";
     }
     const anomalyMap = getWorkEventAnomalyMap(state.workEvents);
     if (!selectedEvents.length) {
@@ -1536,31 +1550,47 @@
       metadata,
     });
     if (!event) throw new Error("作業イベントの時刻が正しくありません。");
+    const savedEvents = await appendWorkEvents([event]);
+    return savedEvents[0] || event;
+  }
+
+  async function appendWorkEvents(events) {
+    if (!Array.isArray(events) || !events.length) {
+      throw new Error("追加する作業イベントがありません。");
+    }
+    const normalizedEvents = events.map((event) => normalizeWorkEvent(event));
+    if (normalizedEvents.some((event) => !event)) {
+      throw new Error("作業イベントの時刻または形式が正しくありません。");
+    }
 
     if (state.mode === "remote" && state.workRemoteAvailable && state.user && supabaseClient) {
       const result = await supabaseClient
         .from(WORK_EVENTS_TABLE)
-        .insert(toWorkDatabasePayload(event))
-        .select(WORK_EVENT_SELECT_FIELDS)
-        .single();
+        .insert(normalizedEvents.map(toWorkDatabasePayload))
+        .select(WORK_EVENT_SELECT_FIELDS);
       if (result.error) {
         if (!isMissingWorkEventsTable(result.error)) throw result.error;
         state.workRemoteAvailable = false;
       } else {
-        const savedEvent = normalizeWorkEvent(result.data) || event;
-        const mergedEvent = upsertWorkEvent(savedEvent) || savedEvent;
+        const savedEvents = (Array.isArray(result.data) ? result.data : [])
+          .map((event) => normalizeWorkEvent(event))
+          .filter(Boolean);
+        if (savedEvents.length !== normalizedEvents.length) {
+          throw new Error("作業イベントの保存結果を確認できません。");
+        }
+        savedEvents.forEach((event) => upsertWorkEvent(event));
         state.workEventsLoaded = true;
         writeLocalWorkEvents();
         syncWorkStatusLabel();
-        return mergedEvent;
+        return savedEvents;
       }
     }
 
-    const savedEvent = upsertWorkEvent(event) || event;
+    const savedEvents = normalizedEvents.map((event) => upsertWorkEvent(event)).filter(Boolean);
     state.workEventsLoaded = true;
     writeLocalWorkEvents();
     syncWorkStatusLabel();
-    return savedEvent;
+    return savedEvents;
   }
 
   function withWorkContext(event, context) {
@@ -1692,11 +1722,11 @@
     elements.workRecordEditorSummary.innerHTML =
       '<div><span>日作業時間</span><strong>' + escapeHtml(formatDuration(dayWorkMs)) + '</strong></div>' +
       '<div><span>セッション</span><strong>' + escapeHtml(String(sessions.length)) + '件</strong></div>' +
-      '<p>タスク・ジャンル（タグ）・メモを保存すると、この日の関連イベントへ反映されます。</p>';
+      '<p>開始・休憩・終了時刻と、タスク・ジャンル（タグ）・メモを保存できます。</p>';
 
     if (!sessions.length) {
       elements.workRecordEditorSessions.innerHTML =
-        '<div class="work-record-editor-empty">この日に編集できる作業セッションはありません。</div>';
+        '<div class="work-record-editor-empty">この日に編集できる作業セッションはありません。上の「新規作業記録を追加」から追加できます。</div>';
       return;
     }
 
@@ -1717,6 +1747,13 @@
           escapeHtml(formatWorkClock(event.occurredAt)) +
         '</span>'
       ).join("");
+      const eventFields = session.events.map((event) =>
+        '<label class="work-record-event-field">' +
+          '<span>' + escapeHtml(WORK_EVENT_LABELS[event.eventType] || event.eventType) + '</span>' +
+          '<input type="datetime-local" step="1" required data-work-record-event-id="' + escapeHtml(event.id) +
+            '" value="' + escapeHtml(toWorkDateTimeLocalValue(event.occurredAt)) + '" />' +
+        '</label>'
+      ).join("");
       const focusClass = String(session.id) === String(state.workRecordEditorFocusSessionId) ? " is-focused" : "";
       const saveDisabled = state.workRecordSaveInFlight ? " disabled" : "";
       return '<article class="work-record-session' + focusClass + '" data-work-record-session="' + escapeHtml(session.id) + '">' +
@@ -1728,6 +1765,7 @@
         '<p class="work-record-session-range">' + escapeHtml(startText) + ' — ' + escapeHtml(endText) + '</p>' +
         '<div class="work-record-event-pills">' + eventTrail + '</div>' +
         '<form class="work-record-session-form" data-work-record-session-id="' + escapeHtml(session.id) + '">' +
+          '<div class="work-record-event-fields field-span-2">' + eventFields + '</div>' +
           '<label>取り組むタスク（任意）' +
             '<select data-work-record-field="taskId">' +
               getWorkContextTaskOptionsHtml(context.taskId || "", context.taskTitle || "") +
@@ -1752,7 +1790,123 @@
     }).join("");
   }
 
+  function openWorkRecordAddForm() {
+    if (!elements.workRecordAddForm || state.workRecordSaveInFlight) return;
+    const day = parseWorkDateKey(state.workRecordEditorDate || state.workLogDate || todayKey());
+    const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0, 0, 0);
+    const end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 10, 0, 0, 0);
+    elements.workRecordAddForm.reset();
+    elements.workRecordAddStart.value = toWorkDateTimeLocalValue(start.toISOString());
+    elements.workRecordAddEnd.value = toWorkDateTimeLocalValue(end.toISOString());
+    elements.workRecordAddTask.innerHTML = getWorkContextTaskOptionsHtml();
+    elements.workRecordAddCategory.innerHTML = getWorkContextCategoryOptionsHtml();
+    elements.workRecordAddForm.hidden = false;
+    elements.workRecordEditorAddButton.hidden = true;
+    window.setTimeout(() => elements.workRecordAddStart.focus(), 40);
+  }
+
+  function closeWorkRecordAddForm() {
+    if (!elements.workRecordAddForm) return;
+    elements.workRecordAddForm.hidden = true;
+    elements.workRecordAddForm.reset();
+    if (elements.workRecordEditorAddButton) elements.workRecordEditorAddButton.hidden = false;
+  }
+
+  function handleWorkRecordAddTaskChange() {
+    const task = state.tasks.find((item) => String(item.id) === String(elements.workRecordAddTask.value));
+    const selectedCategory = elements.workRecordAddCategory.value;
+    elements.workRecordAddCategory.innerHTML = getWorkContextCategoryOptionsHtml(
+      task,
+      selectedCategory || getDefaultWorkCategory(task)
+    );
+  }
+
+  function parseWorkRecordDateTime(value) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    const date = new Date(text);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  async function saveWorkRecordAdd(event) {
+    event.preventDefault();
+    if (!elements.workRecordAddForm || state.workRecordSaveInFlight) return;
+    if (!elements.workRecordAddForm.reportValidity()) return;
+
+    const start = parseWorkRecordDateTime(elements.workRecordAddStart.value);
+    const breakStart = parseWorkRecordDateTime(elements.workRecordAddBreakStart.value);
+    const breakEnd = parseWorkRecordDateTime(elements.workRecordAddBreakEnd.value);
+    const end = parseWorkRecordDateTime(elements.workRecordAddEnd.value);
+    if (!start || !end) {
+      showToast("作業開始と作業終了の時刻を入力してください。", true);
+      return;
+    }
+    if ((breakStart && !breakEnd) || (!breakStart && breakEnd)) {
+      showToast("休憩開始と休憩終了は両方入力してください。", true);
+      return;
+    }
+
+    const timeline = [start, breakStart, breakEnd, end].filter(Boolean);
+    for (let index = 1; index < timeline.length; index += 1) {
+      if (timeline[index].getTime() <= timeline[index - 1].getTime()) {
+        showToast("時刻は開始から終了へ、順番に入力してください。", true);
+        return;
+      }
+    }
+    if (timeline.some((date) => date.getTime() > Date.now())) {
+      showToast("未来の時刻は作業記録に追加できません。", true);
+      return;
+    }
+
+    const task = state.tasks.find((item) => String(item.id) === String(elements.workRecordAddTask.value)) || null;
+    const category = elements.workRecordAddCategory.value.trim();
+    const memo = elements.workRecordAddMemo.value.trim();
+    const context = {
+      taskId: task?.id || null,
+      taskTitle: task?.title || null,
+      category: category || null,
+      memo: memo || null,
+      activityId: getWorkActivityId(task, category),
+    };
+    const metadata = getWorkContextMetadata(context, "manual_add");
+    const createdAt = new Date().toISOString();
+    const events = [
+      { eventType: "start", occurredAt: start.toISOString(), createdAt, activityId: context.activityId, metadata },
+    ];
+    if (breakStart && breakEnd) {
+      events.push(
+        { eventType: "break_start", occurredAt: breakStart.toISOString(), createdAt, activityId: context.activityId, metadata },
+        { eventType: "break_end", occurredAt: breakEnd.toISOString(), createdAt, activityId: context.activityId, metadata }
+      );
+    }
+    events.push({ eventType: "end", occurredAt: end.toISOString(), createdAt, activityId: context.activityId, metadata });
+
+    const saveButton = elements.workRecordAddForm.querySelector('button[type="submit"]');
+    state.workRecordSaveInFlight = true;
+    state.workActionInFlight = true;
+    if (saveButton) saveButton.disabled = true;
+    renderWorkTimer();
+    try {
+      await appendWorkEvents(events);
+      state.workRecordEditorDate = getWorkDateKey(start.toISOString());
+      state.workLogDate = state.workRecordEditorDate;
+      closeWorkRecordAddForm();
+      render();
+      renderWorkRecordEditor();
+      showToast("作業記録を追加しました");
+    } catch (error) {
+      showToast(toFriendlyError(error), true);
+    } finally {
+      state.workRecordSaveInFlight = false;
+      state.workActionInFlight = false;
+      if (saveButton) saveButton.disabled = false;
+      render();
+      renderWorkRecordEditor();
+    }
+  }
+
   function openWorkRecordEditorModal(dateKey = todayKey(), focusSessionId = null) {
+    closeWorkRecordAddForm();
     state.workRecordEditorDate = dateKey || todayKey();
     state.workRecordEditorFocusSessionId = focusSessionId || null;
     elements.workRecordEditorModal.hidden = false;
@@ -1761,7 +1915,10 @@
     window.setTimeout(() => {
       const focusedSession = [...elements.workRecordEditorSessions.querySelectorAll("[data-work-record-session]")]
         .find((item) => String(item.dataset.workRecordSession) === String(focusSessionId || ""));
-      const target = focusedSession?.querySelector("select") || elements.workRecordEditorSessions.querySelector("select");
+      const target = focusedSession?.querySelector("[data-work-record-event-id]") ||
+        focusedSession?.querySelector("select") ||
+        elements.workRecordEditorSessions.querySelector("[data-work-record-event-id]") ||
+        elements.workRecordEditorSessions.querySelector("select");
       if (target) target.focus();
     }, 40);
   }
@@ -1773,6 +1930,7 @@
   }
 
   function closeWorkRecordEditorModal() {
+    closeWorkRecordAddForm();
     elements.workRecordEditorModal.hidden = true;
     state.workRecordEditorDate = null;
     state.workRecordEditorFocusSessionId = null;
@@ -1793,11 +1951,37 @@
     event.preventDefault();
     const form = event.target.closest("form[data-work-record-session-id]");
     if (!form || state.workRecordSaveInFlight) return;
+    if (!form.reportValidity()) return;
     const sessionId = form.dataset.workRecordSessionId;
     const session = buildWorkSessions(state.workEvents)
       .find((item) => String(item.id) === String(sessionId));
     if (!session) {
       showToast("作業セッションが見つかりません。再読込してください。", true);
+      return;
+    }
+
+    const eventInputs = new Map(
+      [...form.querySelectorAll("[data-work-record-event-id]")]
+        .map((input) => [String(input.dataset.workRecordEventId), input.value])
+    );
+    const updatedEvents = session.events.map((item) => {
+      const occurredDate = parseWorkRecordDateTime(eventInputs.get(String(item.id)));
+      if (!occurredDate) return null;
+      return { ...item, occurredAt: occurredDate.toISOString() };
+    });
+    if (updatedEvents.some((item) => !item)) {
+      showToast("作業イベントの時刻を確認してください。", true);
+      return;
+    }
+    const timestamps = updatedEvents.map((item) => new Date(item.occurredAt).getTime());
+    for (let index = 1; index < timestamps.length; index += 1) {
+      if (!Number.isFinite(timestamps[index]) || timestamps[index] <= timestamps[index - 1]) {
+        showToast("セッション内のイベント時刻は順番にしてください。", true);
+        return;
+      }
+    }
+    if (timestamps.some((timestamp) => timestamp > Date.now())) {
+      showToast("未来の時刻には更新できません。", true);
       return;
     }
 
@@ -1818,10 +2002,15 @@
     if (saveButton) saveButton.disabled = true;
     renderWorkTimer();
     try {
-      for (const eventToUpdate of session.events.map((item) => withWorkContext(item, context))) {
+      for (const eventToUpdate of updatedEvents.map((item) => withWorkContext(item, context))) {
         await updateWorkEvent(eventToUpdate);
       }
-      showToast("作業内容を更新しました");
+      const updatedStart = updatedEvents.find((item) => item.eventType === "start") || updatedEvents[0];
+      if (updatedStart) {
+        state.workRecordEditorDate = getWorkDateKey(updatedStart.occurredAt);
+        state.workLogDate = state.workRecordEditorDate;
+      }
+      showToast("作業記録を更新しました");
     } catch (error) {
       showToast(toFriendlyError(error), true);
     } finally {
@@ -4493,6 +4682,13 @@
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
+  function toWorkDateTimeLocalValue(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value).slice(0, 19);
+    const pad = (number) => String(number).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
   function toFriendlyError(error) {
     const message = String(error?.message || error || "");
     if (message.includes("Invalid login credentials")) return "メールアドレスまたはパスワードが正しくありません。";
@@ -4711,6 +4907,10 @@
     elements.workRecordEditorModal.addEventListener("click", (event) => {
       if (event.target === elements.workRecordEditorModal) closeWorkRecordEditorModal();
     });
+    elements.workRecordEditorAddButton.addEventListener("click", openWorkRecordAddForm);
+    elements.workRecordAddForm.addEventListener("submit", saveWorkRecordAdd);
+    elements.workRecordAddTask.addEventListener("change", handleWorkRecordAddTaskChange);
+    elements.closeWorkRecordAddButton.addEventListener("click", closeWorkRecordAddForm);
     elements.addTaskButton.addEventListener("click", () => openTaskModal());
     elements.emptyAddButton.addEventListener("click", () => openTaskModal());
     elements.addResearchPlanButton.addEventListener("click", () => openResearchPlanModal());
