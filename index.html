@@ -1010,11 +1010,35 @@
           <div>
             <p class="section-kicker">WORK RECORD</p>
             <h2 id="workRecordEditorTitle">作業記録を編集</h2>
-            <p class="work-record-editor-description">作業セッションごとに、取り組んだタスク・ジャンル（タグ）・メモを確認して編集できます。</p>
+            <p class="work-record-editor-description">作業セッションごとに、開始・休憩・終了時刻とタスク・ジャンル（タグ）・メモを編集できます。</p>
           </div>
           <button id="closeWorkRecordEditor" class="icon-button close-button" type="button" aria-label="閉じる">×</button>
         </div>
         <div id="workRecordEditorSummary" class="work-record-editor-summary"></div>
+        <div class="work-record-editor-add">
+          <div class="work-record-editor-add-heading">
+            <div>
+              <p class="section-kicker">MANUAL ENTRY</p>
+              <h3>新規作業記録</h3>
+              <p>任意の時刻に、作業セッションを追加します。休憩は必要な場合だけ入力します。</p>
+            </div>
+            <button id="workRecordEditorAddButton" class="secondary-button" type="button">新規作業記録を追加</button>
+          </div>
+          <form id="workRecordAddForm" class="research-form work-record-add-form" hidden>
+            <label>作業開始<input id="workRecordAddStart" type="datetime-local" step="1" required /></label>
+            <label>作業終了<input id="workRecordAddEnd" type="datetime-local" step="1" required /></label>
+            <label>休憩開始（任意）<input id="workRecordAddBreakStart" type="datetime-local" step="1" /></label>
+            <label>休憩終了（任意）<input id="workRecordAddBreakEnd" type="datetime-local" step="1" /></label>
+            <label>取り組むタスク（任意）<select id="workRecordAddTask"><option value="">タスクを選択しない</option></select></label>
+            <label>ジャンル / タグ（任意）<select id="workRecordAddCategory"><option value="">未分類</option></select></label>
+            <label class="field-span-2">作業メモ（任意）<textarea id="workRecordAddMemo" maxlength="2000" rows="3" placeholder="今回やったこと、確認したこと、次にやること"></textarea></label>
+            <div class="modal-actions field-span-2">
+              <span class="action-spacer"></span>
+              <button id="closeWorkRecordAddButton" class="secondary-button" type="button">キャンセル</button>
+              <button class="primary-button" type="submit">作業記録を追加</button>
+            </div>
+          </form>
+        </div>
         <div id="workRecordEditorSessions" class="work-record-editor-sessions"></div>
         <div class="modal-actions">
           <span class="action-spacer"></span>
