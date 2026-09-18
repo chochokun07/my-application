@@ -1538,11 +1538,22 @@ p {
   font-weight: 400;
 }
 
-.work-log-event-heading > p {
+.work-log-event-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.work-log-event-heading-actions p {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
   text-align: right;
+}
+
+.work-log-event-heading-actions .secondary-button {
+  white-space: nowrap;
 }
 
 .work-log-events {
@@ -1622,6 +1633,14 @@ p {
 .work-log-event-item small {
   color: var(--muted);
   font-size: 10px;
+}
+
+.work-log-event-edit {
+  margin-left: auto;
+  padding: 2px 0;
+  color: var(--green);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .work-log-event-warning {
@@ -2813,8 +2832,19 @@ select:hover {
     font-size: 12px;
   }
 
-  .work-log-event-heading > p {
+  .work-log-event-heading-actions {
+    width: 100%;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .work-log-event-heading-actions p {
     text-align: left;
+  }
+
+  .work-log-event-heading-actions .secondary-button {
+    width: 100%;
   }
 
   .work-log-event-item {

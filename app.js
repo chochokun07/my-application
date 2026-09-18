@@ -195,6 +195,7 @@
     workLogTodayButton: $("workLogTodayButton"),
     workLogNextButton: $("workLogNextButton"),
     workLogRefreshButton: $("workLogRefreshButton"),
+    workLogEditDateButton: $("workLogEditDateButton"),
     workLogCategorySummary: $("workLogCategorySummary"),
     closeWorkLogModal: $("closeWorkLogModal"),
     closeWorkLogModalButton: $("closeWorkLogModalButton"),
@@ -824,6 +825,15 @@
     };
   }
 
+  function toWorkDatabaseUpdatePayload(event) {
+    return {
+      event_type: event.eventType,
+      occurred_at: event.occurredAt,
+      activity_id: event.activityId || null,
+      metadata: event.metadata || {},
+    };
+  }
+
   function setWorkSyncStatus(label, status) {
     if (!elements.workTimerSyncStatus) return;
     elements.workTimerSyncStatus.textContent = label;
@@ -1368,6 +1378,14 @@
     elements.workLogCalendar.innerHTML = '<div class="work-log-calendar-grid">' + timeAxis + columns + '</div>';
 
     const selectedEvents = sortWorkEvents(state.workEvents.filter((event) => getWorkDateKey(event.occurredAt) === selectedDate));
+    const selectedSessions = getWorkSessionsForDate(selectedDate);
+    const eventSessionIds = new Map();
+    selectedSessions.forEach((session) => {
+      session.events.forEach((event) => eventSessionIds.set(event.id, session.id));
+    });
+    if (elements.workLogEditDateButton) {
+      elements.workLogEditDateButton.disabled = selectedSessions.length === 0;
+    }
     const anomalyMap = getWorkEventAnomalyMap(state.workEvents);
     if (!selectedEvents.length) {
       elements.workLogEvents.innerHTML = '<li class="work-log-empty">この日のイベントはありません。</li>';
@@ -1393,13 +1411,18 @@
       const contextHtml = showContext
         ? '<div class="work-log-event-context">' + contextParts.join("") + '</div>'
         : "";
+      const sessionId = eventSessionIds.get(event.id);
+      const editButton = sessionId
+        ? '<button class="work-log-event-edit text-button" type="button" data-work-record-edit-date="' +
+          escapeHtml(selectedDate) + '" data-work-record-edit-session-id="' + escapeHtml(sessionId) + '">編集</button>'
+        : "";
       return '<li class="work-log-event-item work-log-event-' + escapeHtml(event.eventType) + '">' +
         '<time datetime="' + escapeHtml(event.occurredAt) + '">' + escapeHtml(formatDateTime(event.occurredAt)) + '</time>' +
         '<div class="work-log-event-content">' +
           '<div class="work-log-event-line">' +
             '<strong>' + escapeHtml(WORK_EVENT_LABELS[event.eventType] || event.eventType) + '</strong>' +
             '<span class="work-log-event-source">' + escapeHtml(getWorkEventSourceLabel(event)) + '</span>' +
-            anomalyText + createdText +
+            anomalyText + createdText + editButton +
           '</div>' +
           contextHtml +
         '</div>' +
@@ -1437,6 +1460,15 @@
   }
 
   function handleWorkLogClick(event) {
+    const editButton = event.target.closest("[data-work-record-edit-date]");
+    if (editButton) {
+      openWorkRecordEditorModal(
+        editButton.dataset.workRecordEditDate,
+        editButton.dataset.workRecordEditSessionId
+      );
+      return;
+    }
+
     const dateButton = event.target.closest("[data-work-log-date]");
     if (!dateButton) return;
     state.workLogDate = dateButton.dataset.workLogDate;
@@ -1550,7 +1582,7 @@
     if (state.mode === "remote" && state.workRemoteAvailable && state.user && supabaseClient) {
       const result = await supabaseClient
         .from(WORK_EVENTS_TABLE)
-        .update(toWorkDatabasePayload(normalized))
+        .update(toWorkDatabaseUpdatePayload(normalized))
         .eq("id", normalized.id)
         .select(WORK_EVENT_SELECT_FIELDS)
         .single();
@@ -4668,6 +4700,9 @@
     });
     elements.workLogNextButton.addEventListener("click", () => moveWorkLogWeek(1));
     elements.workLogRefreshButton.addEventListener("click", refreshWorkLog);
+    elements.workLogEditDateButton.addEventListener("click", () => {
+      openWorkRecordEditorModal(state.workLogDate || todayKey());
+    });
     elements.closeWorkLogModal.addEventListener("click", closeWorkLogModal);
     elements.closeWorkLogModalButton.addEventListener("click", closeWorkLogModal);
     elements.workRecordEditorSessions.addEventListener("submit", saveWorkRecordSession);
