@@ -4525,6 +4525,73 @@ select:hover {
   line-height: 1.5;
 }
 
+
+.work-record-editor-add {
+  display: grid;
+  gap: 13px;
+  margin-bottom: 16px;
+  padding: 15px;
+  border: 1px solid rgba(61, 153, 108, 0.24);
+  border-radius: 15px;
+  background: rgba(232, 244, 235, 0.48);
+}
+
+.work-record-editor-add-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.work-record-editor-add-heading h3 {
+  margin: 3px 0 0;
+  color: var(--green);
+  font-size: 17px;
+}
+
+.work-record-editor-add-heading p:last-child {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.work-record-editor-add-heading .secondary-button {
+  flex: 0 0 auto;
+}
+
+.work-record-add-form {
+  padding-top: 13px;
+  border-top: 1px solid rgba(61, 153, 108, 0.18);
+}
+
+.work-record-event-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0 0 14px;
+}
+
+.work-record-event-field {
+  display: grid;
+  gap: 5px;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.work-record-event-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+
 .work-record-editor-sessions {
   display: grid;
   gap: 14px;
@@ -4617,6 +4684,7 @@ select:hover {
   font-weight: 700;
 }
 
+.work-record-session-form input,
 .work-record-session-form select,
 .work-record-session-form textarea {
   width: 100%;
@@ -4685,6 +4753,18 @@ select:hover {
 
   .work-record-editor-sessions {
     max-height: 56vh;
+  }
+
+  .work-record-editor-add-heading {
+    flex-direction: column;
+  }
+
+  .work-record-editor-add-heading .secondary-button {
+    width: 100%;
+  }
+
+  .work-record-event-fields {
+    grid-template-columns: 1fr;
   }
 
   .work-record-session {
