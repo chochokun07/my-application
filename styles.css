@@ -923,7 +923,8 @@ code {
 }
 
 .research-task-mark,
-.research-plan-mark {
+.research-plan-mark,
+.hobby-project-mark {
   color: var(--orange);
   font-weight: 700;
 }
