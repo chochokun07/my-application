@@ -416,7 +416,7 @@
           <div class="research-panel-heading activity-notes-heading">
             <div>
               <p class="section-kicker">NOTES</p>
-              <h2 id="hobbyNotesTitle">趣味ノート</h2>
+              <h2 id="hobbyNotesTitle">ノート</h2>
               <p>趣味で得た知見や、動画制作に活かしたいことをまとめます。</p>
             </div>
             <button class="secondary-button" type="button" data-note-action="add" data-note-activity="hobby">＋ ノートを追加</button>
@@ -425,8 +425,8 @@
           <div class="notes-grid notes-activity-grid" data-notes-list="hobby"></div>
           <div class="notes-empty" data-notes-empty hidden>
             <span class="research-empty-mark" aria-hidden="true">✦</span>
-            <p data-notes-empty-text>趣味ノートはまだありません。</p>
-            <button class="text-button" type="button" data-note-action="add" data-note-activity="hobby">趣味ノートを追加</button>
+            <p data-notes-empty-text>ノートはまだありません。</p>
+            <button class="text-button" type="button" data-note-action="add" data-note-activity="hobby">ノートを追加</button>
           </div>
         </section>
 
@@ -451,8 +451,10 @@
               <div>
                 <p id="hobbyProjectType" class="section-kicker"></p>
                 <h2 id="hobbyProjectTitle"></h2>
+                <span id="hobbyProjectStatus" class="hobby-project-status-badge"></span>
               </div>
               <div id="hobbyProjectActions" class="hobby-project-actions" hidden>
+                <button id="hobbyProjectStatusButton" class="secondary-button" type="button" data-hobby-action="toggle-project-status"></button>
                 <button class="text-button" type="button" data-hobby-action="edit-project">名称変更</button>
                 <button class="hobby-danger-button" type="button" data-hobby-action="delete-project">削除</button>
               </div>
@@ -547,9 +549,18 @@
                       <input id="hobbyCharsPerMinute" type="number" min="1" max="2000" step="1" />
                     </label>
                   </div>
-
->
                 </div>
+
+                <aside id="hobbyConceptPreview" class="hobby-concept-preview" aria-labelledby="hobbyConceptPreviewTitle">
+                  <div class="hobby-subpanel-heading">
+                    <div>
+                      <p class="hobby-pane-kicker">CONCEPT PREVIEW</p>
+                      <h3 id="hobbyConceptPreviewTitle">構想</h3>
+                    </div>
+                    <button class="text-button" type="button" data-hobby-action="edit-concept">編集</button>
+                  </div>
+                  <div id="hobbyConceptPreviewBody" class="hobby-markdown-preview"></div>
+                </aside>
               </div>
             </div>
           </section>
@@ -1072,12 +1083,20 @@
             <input id="taskTags" type="hidden" />
             <small class="field-help">候補は設定から追加・削除できます。</small>
           </label>
-          <label class="field-span-2">
-            研究プラン（任意）
-            <select id="taskResearchPlan">
-              <option value="">紐付けない</option>
-            </select>
-          </label>
+          <div id="taskAssociationFields" class="task-association-fields field-span-2">
+            <label id="taskResearchPlanField" hidden>
+              研究プラン（任意）
+              <select id="taskResearchPlan">
+                <option value="">紐付けない</option>
+              </select>
+            </label>
+            <label id="taskHobbyProjectField" hidden>
+              動画プロジェクト（任意）
+              <select id="taskHobbyProject">
+                <option value="">紐付けない</option>
+              </select>
+            </label>
+          </div>
           <label class="field-span-2">
             メモ
             <textarea id="taskMemo" maxlength="1000" rows="3" placeholder="補足や次にやること"></textarea>
@@ -1474,7 +1493,7 @@
           <input id="noteId" type="hidden" />
           <label class="field-span-2">
             タイトル
-            <input id="noteTitle" type="text" maxlength="120" required placeholder="例：粉体のUV-Vis測定では積分球が必要" />
+            <input id="noteTitle" type="text" maxlength="120" required />
           </label>
           <label>
             所属
@@ -1501,7 +1520,7 @@
     <script src="./config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./hobby.js" defer></script>
-    <script src="./app.js?v=1.0.7" defer></script>
+    <script src="./app.js?v=1.0.11" defer></script>
     <script src="./research-bridge.js" defer></script>
   </body>
 </html>

@@ -2449,6 +2449,16 @@ select:hover {
   grid-column: span 2;
 }
 
+.task-association-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.task-association-fields > label {
+  min-width: 0;
+}
+
 .toggle-field {
   display: flex;
   grid-template-columns: none;
@@ -2962,6 +2972,10 @@ select:hover {
     grid-column: auto;
   }
 
+  .task-association-fields {
+    grid-template-columns: 1fr;
+  }
+
   .modal-actions {
     flex-wrap: wrap;
   }
@@ -3077,6 +3091,40 @@ select:hover {
   margin-top: 18px;
 }
 
+.hobby-project-group {
+  display: grid;
+  gap: 8px;
+}
+
+.hobby-project-group + .hobby-project-group {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.hobby-project-group-heading,
+.hobby-project-manage-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted-dark);
+  font-size: 11px;
+}
+
+.hobby-project-group-heading span,
+.hobby-project-manage-group-heading span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.hobby-project-group-list,
+.hobby-project-manage-group-list {
+  display: grid;
+  gap: 8px;
+}
+
 .hobby-project-card {
   display: grid;
   gap: 4px;
@@ -3142,6 +3190,18 @@ select:hover {
 .hobby-workspace-header h2 {
   font-size: clamp(24px, 4vw, 36px);
   letter-spacing: -0.04em;
+}
+
+.hobby-project-status-badge {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .hobby-project-actions {
@@ -3317,18 +3377,107 @@ select:hover {
 
 .hobby-script-layout {
   display: grid;
-  grid-template-columns: minmax(160px, 205px) minmax(0, 1fr);
+  grid-template-columns: minmax(160px, 205px) minmax(0, 1.45fr) minmax(220px, 0.8fr);
   gap: 20px;
 }
 
 .hobby-chapter-panel,
-.hobby-script-editor {
+.hobby-script-editor,
+.hobby-concept-preview {
   min-width: 0;
 }
 
 .hobby-chapter-panel {
   padding-right: 18px;
   border-right: 1px solid var(--line);
+}
+
+.hobby-concept-preview {
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+}
+
+.hobby-markdown-preview {
+  max-height: 70vh;
+  min-height: 240px;
+  overflow: auto;
+  margin-top: 16px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.hobby-markdown-preview h1,
+.hobby-markdown-preview h2,
+.hobby-markdown-preview h3,
+.hobby-markdown-preview h4,
+.hobby-markdown-preview h5,
+.hobby-markdown-preview h6 {
+  margin: 0 0 9px;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.hobby-markdown-preview h1 { font-size: 20px; }
+.hobby-markdown-preview h2 { font-size: 18px; }
+.hobby-markdown-preview h3 { font-size: 16px; }
+.hobby-markdown-preview h4,
+.hobby-markdown-preview h5,
+.hobby-markdown-preview h6 { font-size: 14px; }
+
+.hobby-markdown-preview p,
+.hobby-markdown-preview ul,
+.hobby-markdown-preview ol,
+.hobby-markdown-preview blockquote,
+.hobby-markdown-preview pre {
+  margin: 0 0 12px;
+}
+
+.hobby-markdown-preview ul,
+.hobby-markdown-preview ol {
+  padding-left: 20px;
+}
+
+.hobby-markdown-preview blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--orange);
+  color: var(--muted-dark);
+}
+
+.hobby-markdown-preview hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.hobby-markdown-preview pre {
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(31, 61, 56, 0.08);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.hobby-markdown-preview code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(31, 61, 56, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.hobby-markdown-preview pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.hobby-markdown-empty {
+  color: var(--muted);
 }
 
 .hobby-subpanel-heading h3,
@@ -3473,6 +3622,20 @@ select:hover {
   font-size: 11px;
 }
 
+@media (max-width: 1100px) {
+  .hobby-script-layout {
+    grid-template-columns: minmax(160px, 205px) minmax(0, 1fr);
+  }
+
+  .hobby-concept-preview {
+    grid-column: 2;
+    padding-top: 18px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}
+
 @media (max-width: 880px) {
   .hobby-project-layout {
     grid-template-columns: 1fr;
@@ -3495,6 +3658,10 @@ select:hover {
     padding-bottom: 16px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .hobby-concept-preview {
+    grid-column: auto;
   }
 
   .hobby-chapter-list {
@@ -3652,6 +3819,15 @@ select:hover {
 .hobby-settings-content-heading h3 { margin: 0; font-size: 16px; }
 .hobby-settings-content-heading p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
 .hobby-project-manage-list { display: grid; gap: 8px; }
+.hobby-project-manage-group {
+  display: grid;
+  gap: 8px;
+}
+.hobby-project-manage-group + .hobby-project-manage-group {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
 .hobby-project-manage-row {
   padding: 10px;
   border: 1px solid var(--line);
@@ -3671,6 +3847,21 @@ select:hover {
 .hobby-project-manage-select small { color: var(--muted); font-size: 10px; }
 .hobby-project-manage-grip { color: var(--muted); font-size: 17px; }
 .hobby-project-manage-actions { flex: 0 0 auto; gap: 5px; }
+.hobby-project-status-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.hobby-project-status-control select {
+  min-height: 30px;
+  padding: 0 5px;
+  border-radius: 7px;
+  font-size: 10px;
+}
 .hobby-settings-panel .secondary-button,
 .hobby-settings-panel .ghost-button { padding: 6px 8px; font-size: 10px; }
 .hobby-settings-panel .hobby-speaker-add { margin: 0 0 14px; }

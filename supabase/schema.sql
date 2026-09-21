@@ -251,6 +251,8 @@ create table if not exists public.script_projects (
   name text not null check (char_length(trim(name)) between 1 and 160),
   concept_type text not null default 'generic'
     check (concept_type in ('generic', 'identity_prediction')),
+  status text not null default 'active'
+    constraint script_projects_status_check check (status in ('active', 'completed')),
   output_template text not null default '{speaker}「{body}」',
   chars_per_minute integer not null default 300
     check (chars_per_minute between 1 and 2000),
@@ -321,11 +323,37 @@ create unique index if not exists identity_concept_items_fixed_field_idx
 alter table public.script_projects
   add column if not exists position integer not null default 0 check (position >= 0);
 
+alter table public.script_projects
+  add column if not exists status text not null default 'active';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.script_projects'::regclass
+      and conname = 'script_projects_status_check'
+  ) then
+    alter table public.script_projects
+      add constraint script_projects_status_check check (status in ('active', 'completed'));
+  end if;
+end
+$$;
+
+alter table public.tasks
+  add column if not exists script_project_id uuid references public.script_projects(id) on delete set null;
+
 create index if not exists script_projects_user_position_idx
   on public.script_projects (user_id, position);
 
 create index if not exists script_projects_user_updated_idx
   on public.script_projects (user_id, updated_at desc);
+
+create index if not exists tasks_script_project_id_idx
+  on public.tasks (user_id, script_project_id);
+
+create index if not exists tasks_script_project_id_fkey_idx
+  on public.tasks (script_project_id);
 
 create index if not exists script_chapters_project_position_idx
   on public.script_chapters (project_id, position);

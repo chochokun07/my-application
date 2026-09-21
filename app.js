@@ -23,8 +23,11 @@
   const RESEARCH_PLANS_TABLE = "research_plans";
   const RESEARCH_SCHEDULES_TABLE = "research_schedules";
   const NOTES_TABLE = "notes";
-  const TASK_SELECT_FIELDS = "id, title, memo, research_report, status, due_date, priority, tags, is_research, research_plan_id, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
-  const LEGACY_TASK_SELECT_FIELDS = "id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
+  const TASK_CORE_SELECT_FIELDS = "id, title, memo, status, due_date, priority, tags, created_at, completed_at, reminder_at, reminder_enabled, updated_at";
+  const TASK_SELECT_FIELDS = `${TASK_CORE_SELECT_FIELDS}, research_report, is_research, research_plan_id, script_project_id`;
+  const TASK_SELECT_FIELDS_NO_HOBBY = `${TASK_CORE_SELECT_FIELDS}, research_report, is_research, research_plan_id`;
+  const TASK_SELECT_FIELDS_NO_RESEARCH = `${TASK_CORE_SELECT_FIELDS}, script_project_id`;
+  const LEGACY_TASK_SELECT_FIELDS = TASK_CORE_SELECT_FIELDS;
   const PLAN_SELECT_FIELDS = "id, title, objective, origin_facts, hypothesis, hypothesis_basis, status, target_date, next_action, notes, created_at, updated_at";
   const LEGACY_PLAN_SELECT_FIELDS = "id, title, objective, status, target_date, next_action, notes, created_at, updated_at";
   const SCHEDULE_SELECT_FIELDS = "id, title, scheduled_at, kind, plan_id, notes, created_at, updated_at";
@@ -112,6 +115,7 @@
     researchPlanDetailId: null,
     researchRemoteAvailable: true,
     researchTaskSchemaAvailable: true,
+    hobbyTaskSchemaAvailable: true,
     researchPlanSchemaAvailable: true,
     researchDataError: "",
     toastTimer: null,
@@ -274,6 +278,9 @@
     taskTagInput: $("taskTagInput"),
     taskTagSuggestions: $("taskTagSuggestions"),
     taskResearchPlan: $("taskResearchPlan"),
+    taskResearchPlanField: $("taskResearchPlanField"),
+    taskHobbyProject: $("taskHobbyProject"),
+    taskHobbyProjectField: $("taskHobbyProjectField"),
     taskSortSelect: $("taskSortSelect"),
     deleteTaskButton: $("deleteTaskButton"),
     closeTaskModal: $("closeTaskModal"),
@@ -513,17 +520,21 @@
     const rawTags = normalizeTags(task.tags);
     const legacyResearch = Boolean(task.is_research ?? task.isResearch ?? task.research_plan_id ?? task.researchPlanId);
     const researchPageTag = getActivityTagLabel("research");
+    const hobbyPageTag = getActivityTagLabel("hobby");
     const tags = legacyResearch && researchPageTag && !hasTag(rawTags, researchPageTag)
       ? [...rawTags, researchPageTag]
       : rawTags;
+    const isResearch = legacyResearch || hasTag(tags, researchPageTag);
+    const isHobby = Boolean(hobbyPageTag && hasTag(tags, hobbyPageTag));
     return {
       id: task.id || createId(),
       title: String(task.title || "").trim(),
       memo: String(task.memo ?? ""),
       researchReport: String(task.research_report ?? task.researchReport ?? ""),
       tags,
-      isResearch: legacyResearch,
-      researchPlanId: task.research_plan_id ?? task.researchPlanId ?? "",
+      isResearch,
+      researchPlanId: isResearch ? (task.research_plan_id ?? task.researchPlanId ?? "") : "",
+      scriptProjectId: isHobby ? (task.script_project_id ?? task.scriptProjectId ?? "") : "",
       status: STATUS_LABELS[task.status] ? task.status : "todo",
       dueDate: task.due_date ?? task.dueDate ?? "",
       priority: PRIORITY_LABELS[task.priority] ? task.priority : "medium",
@@ -543,6 +554,7 @@
       tags: task.tags,
       is_research: Boolean(task.isResearch),
       research_plan_id: task.researchPlanId || null,
+      script_project_id: task.scriptProjectId || null,
       status: task.status,
       due_date: task.dueDate || null,
       priority: task.priority,
@@ -556,6 +568,7 @@
       delete payload.research_plan_id;
       delete payload.research_report;
     }
+    if (!state.hobbyTaskSchemaAvailable) delete payload.script_project_id;
     return payload;
   }
 
@@ -3066,11 +3079,32 @@
     return state.plans.find((plan) => plan.id === planId) || null;
   }
 
+  function getHobbyVideoProjects() {
+    const projects = window.__VECTORY_HOBBY_CONTEXT__?.getProjects?.();
+    return Array.isArray(projects) ? projects : [];
+  }
+
+  function getHobbyProjectById(projectId) {
+    return getHobbyVideoProjects().find((project) => project.id === projectId) || null;
+  }
+
+  function getTaskSelectFields() {
+    if (state.researchTaskSchemaAvailable && state.hobbyTaskSchemaAvailable) return TASK_SELECT_FIELDS;
+    if (state.researchTaskSchemaAvailable) return TASK_SELECT_FIELDS_NO_HOBBY;
+    if (state.hobbyTaskSchemaAvailable) return TASK_SELECT_FIELDS_NO_RESEARCH;
+    return LEGACY_TASK_SELECT_FIELDS;
+  }
+
   function isMissingResearchColumn(error) {
     const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
     return message.includes("research_plan_id") || message.includes("is_research")
       || message.includes("research_report") || message.includes("origin_facts")
       || message.includes("hypothesis_basis") || message.includes("hypothesis");
+  }
+
+  function isMissingHobbyTaskColumn(error) {
+    const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+    return message.includes("script_project_id");
   }
 
   function isMissingResearchTable(error) {
@@ -3080,6 +3114,10 @@
 
   function researchSetupMessage() {
     return "研究データを同期するには、最新のsupabase/schema.sqlをSupabaseのSQL Editorで実行してください。";
+  }
+
+  function hobbySetupMessage() {
+    return "動画プロジェクトとの紐づけを使うには、最新のsupabase/schema.sqlをSupabaseのSQL Editorで実行してください。";
   }
 
 
@@ -3128,6 +3166,32 @@
         `).join("")
       : '<p class="tag-picker-empty">候補がありません。設定から追加できます。</p>';
     elements.taskTagSuggestions.hidden = document.activeElement !== elements.taskTagInput && !query;
+    updateTaskAssociationFields();
+  }
+
+  function renderHobbyProjectSelector(selectedId = elements.taskHobbyProject?.value || "") {
+    if (!elements.taskHobbyProject) return;
+    const projects = getHobbyVideoProjects()
+      .slice()
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ja-JP"));
+    elements.taskHobbyProject.innerHTML = '<option value="">紐付けない</option>' + projects.map((project) =>
+      `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`
+    ).join("");
+    elements.taskHobbyProject.value = projects.some((project) => project.id === selectedId) ? selectedId : "";
+  }
+
+  function updateTaskAssociationFields() {
+    if (!elements.taskResearchPlanField || !elements.taskHobbyProjectField) return;
+    const tags = normalizeTags(state.taskTagDraft);
+    const isResearchTask = hasTag(tags, getActivityTagLabel("research"));
+    const isHobbyTask = hasTag(tags, getActivityTagLabel("hobby"));
+    elements.taskResearchPlanField.hidden = !isResearchTask;
+    elements.taskHobbyProjectField.hidden = !isHobbyTask;
+    elements.taskResearchPlan.disabled = !isResearchTask;
+    elements.taskHobbyProject.disabled = !isHobbyTask;
+    if (!isResearchTask) elements.taskResearchPlan.value = "";
+    if (!isHobbyTask) elements.taskHobbyProject.value = "";
+    if (isHobbyTask) renderHobbyProjectSelector();
   }
 
   function showTaskTagSuggestions() {
@@ -3215,6 +3279,7 @@
     const statusLabel = STATUS_LABELS[task.status];
     const dueClass = isOverdue(task) ? " is-overdue" : "";
     const researchPlan = getPlanById(task.researchPlanId);
+    const hobbyProject = getHobbyProjectById(task.scriptProjectId);
     const reminder = task.reminderEnabled && task.reminderAt
       ? `<span class="task-meta-item">♧ ${escapeHtml(formatDateTime(task.reminderAt))}</span>`
       : "";
@@ -3223,6 +3288,9 @@
       : "";
     const researchPlanMark = researchPlan
       ? `<span class="task-meta-item research-plan-mark">↳ ${escapeHtml(researchPlan.title)}</span>`
+      : "";
+    const hobbyProjectMark = hobbyProject && taskBelongsToActivity(task, "hobby")
+      ? `<span class="task-meta-item hobby-project-mark">✦ ${escapeHtml(hobbyProject.name)}</span>`
       : "";
     const memo = task.memo ? `<p class="task-memo">${escapeHtml(task.memo)}</p>` : "";
     const tags = task.tags.length
@@ -3244,6 +3312,7 @@
             <span class="priority-chip priority-${escapeHtml(task.priority)}">${escapeHtml(PRIORITY_LABELS[task.priority])}</span>
             ${researchMark}
             ${researchPlanMark}
+            ${hobbyProjectMark}
             ${reminder}
           </div>
           ${tags}
@@ -3846,10 +3915,19 @@
       .from(TABLE_NAME)
       .select(selectFields)
       .order("created_at", { ascending: false });
-    let result = await fetchTasks(state.researchTaskSchemaAvailable ? TASK_SELECT_FIELDS : LEGACY_TASK_SELECT_FIELDS);
-    if (result.error && state.researchTaskSchemaAvailable && isMissingResearchColumn(result.error)) {
-      state.researchTaskSchemaAvailable = false;
-      result = await fetchTasks(LEGACY_TASK_SELECT_FIELDS);
+    let result;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      result = await fetchTasks(getTaskSelectFields());
+      if (!result.error) break;
+      if (state.hobbyTaskSchemaAvailable && isMissingHobbyTaskColumn(result.error)) {
+        state.hobbyTaskSchemaAvailable = false;
+        continue;
+      }
+      if (state.researchTaskSchemaAvailable && isMissingResearchColumn(result.error)) {
+        state.researchTaskSchemaAvailable = false;
+        continue;
+      }
+      break;
     }
     if (result.error) throw result.error;
     state.tasks = (result.data || []).map(normalizeTask);
@@ -3892,13 +3970,20 @@
   }
 
   async function runRemoteTaskMutation(task, operation) {
+    if (task.researchPlanId && !state.researchTaskSchemaAvailable) throw new Error(researchSetupMessage());
+    if (task.scriptProjectId && !state.hobbyTaskSchemaAvailable) throw new Error(hobbySetupMessage());
     const execute = () => {
       const query = operation === "update"
         ? supabaseClient.from(TABLE_NAME).update(toDatabasePayload(task)).eq("id", task.id)
         : supabaseClient.from(TABLE_NAME).insert(toDatabasePayload(task));
-      return query.select(state.researchTaskSchemaAvailable ? TASK_SELECT_FIELDS : LEGACY_TASK_SELECT_FIELDS).single();
+      return query.select(getTaskSelectFields()).single();
     };
     let result = await execute();
+    if (result.error && state.hobbyTaskSchemaAvailable && isMissingHobbyTaskColumn(result.error)) {
+      state.hobbyTaskSchemaAvailable = false;
+      if (task.scriptProjectId) throw new Error(hobbySetupMessage());
+      result = await execute();
+    }
     if (result.error && state.researchTaskSchemaAvailable && isMissingResearchColumn(result.error)) {
       state.researchTaskSchemaAvailable = false;
       if (task.researchPlanId) throw new Error(researchSetupMessage());
@@ -3935,6 +4020,7 @@
       state.workEvents = [];
       state.workEventsLoaded = false;
       state.workRemoteAvailable = true;
+      state.hobbyTaskSchemaAvailable = true;
       closeAppSettings();
       setSyncStatus("ログイン待ち", "local");
       showAuth();
@@ -3947,6 +4033,8 @@
       state.workEvents = [];
       state.workEventsLoaded = false;
       state.workRemoteAvailable = true;
+      state.researchTaskSchemaAvailable = true;
+      state.hobbyTaskSchemaAvailable = true;
     }
     localStorage.removeItem(LOCAL_MODE_KEY);
     loadUserAppSettings(state.user);
@@ -3990,8 +4078,11 @@
   function getTaskFromForm() {
     const existing = state.tasks.find((task) => task.id === state.editingTaskId);
     const status = elements.taskStatus.value;
-    const researchPlanId = elements.taskResearchPlan.value || "";
     const tags = normalizeTags(state.taskTagDraft);
+    const isResearchTask = hasTag(tags, getActivityTagLabel("research"));
+    const isHobbyTask = hasTag(tags, getActivityTagLabel("hobby"));
+    const researchPlanId = isResearchTask ? (elements.taskResearchPlan.value || "") : "";
+    const scriptProjectId = isHobbyTask ? (elements.taskHobbyProject.value || "") : "";
     const completedAt = status === "completed"
       ? existing?.completedAt || new Date().toISOString()
       : null;
@@ -4001,8 +4092,9 @@
       memo: elements.taskMemo.value.trim(),
       researchReport: existing?.researchReport || "",
       tags,
-      isResearch: hasTag(tags, getActivityTagLabel("research")) || Boolean(researchPlanId),
+      isResearch: isResearchTask,
       researchPlanId,
+      scriptProjectId,
       dueDate: elements.taskDueDate.value || "",
       priority: elements.taskPriority.value,
       status,
@@ -4347,6 +4439,7 @@
       tags: normalizeTags([...(existing?.tags || []), researchTag]),
       isResearch: true,
       researchPlanId: elements.researchTaskDetailPlan.value || "",
+      scriptProjectId: existing?.scriptProjectId || "",
       status,
       dueDate: elements.researchTaskDetailDueDate.value || "",
       priority: elements.researchTaskDetailPriority.value,
@@ -4654,6 +4747,9 @@
     renderTaskTagPicker();
     updateResearchPlanSelectors();
     elements.taskResearchPlan.value = task?.researchPlanId || "";
+    renderHobbyProjectSelector(task?.scriptProjectId || "");
+    elements.taskHobbyProject.value = task?.scriptProjectId || "";
+    updateTaskAssociationFields();
     elements.taskDueDate.value = task?.dueDate || "";
     elements.taskPriority.value = task?.priority || "medium";
     elements.taskStatus.value = task?.status || "todo";
@@ -4695,6 +4791,7 @@
     if (message.includes("User already registered")) return "このメールアドレスはすでに登録されています。";
     if (message.includes("work_events")) return "作業記録を同期できません。supabase/schema.sqlのwork_events定義を確認してください。";
     if (message.includes("notes")) return notesSetupMessage();
+    if (message.includes("script_project_id") || message.includes("script_projects")) return hobbySetupMessage();
     if (message.includes("research_plans") || message.includes("research_schedules") || message.includes("research_plan_id") || message.includes("is_research")) return researchSetupMessage();
     if (message.includes("relation") && message.includes("does not exist")) return "Supabaseにtasksテーブルがありません。READMEのSQLを実行してください。";
     if (message.includes("Failed to fetch")) return "通信に失敗しました。接続を確認してください。";
@@ -4717,6 +4814,7 @@
     state.workRemoteAvailable = true;
     state.researchRemoteAvailable = true;
     state.researchTaskSchemaAvailable = true;
+    state.hobbyTaskSchemaAvailable = true;
     state.researchPlanSchemaAvailable = true;
     state.researchDataError = "";
     localStorage.setItem(LOCAL_MODE_KEY, "true");
@@ -4949,6 +5047,13 @@
     elements.taskTagInput.addEventListener("input", renderTaskTagPicker);
     elements.taskTagInput.addEventListener("keydown", handleTaskTagInputKeydown);
     elements.taskTagInput.addEventListener("blur", () => window.setTimeout(hideTaskTagSuggestions, 120));
+    window.addEventListener("vectory:hobby-projects-change", () => {
+      if (!elements.taskModal.hidden) {
+        renderHobbyProjectSelector();
+        updateTaskAssociationFields();
+      }
+      render();
+    });
     elements.deleteTaskButton.addEventListener("click", () => deleteTask(state.editingTaskId));
     elements.taskModal.addEventListener("click", (event) => {
       if (event.target === elements.taskModal) closeTaskModal();
