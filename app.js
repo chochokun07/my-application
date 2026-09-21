@@ -519,13 +519,14 @@
   function normalizeTask(task = {}) {
     const rawTags = normalizeTags(task.tags);
     const legacyResearch = Boolean(task.is_research ?? task.isResearch ?? task.research_plan_id ?? task.researchPlanId);
+    const legacyHobby = Boolean(task.script_project_id ?? task.scriptProjectId);
     const researchPageTag = getActivityTagLabel("research");
     const hobbyPageTag = getActivityTagLabel("hobby");
-    const tags = legacyResearch && researchPageTag && !hasTag(rawTags, researchPageTag)
-      ? [...rawTags, researchPageTag]
-      : rawTags;
+    const tags = [...rawTags];
+    if (legacyResearch && researchPageTag && !hasTag(tags, researchPageTag)) tags.push(researchPageTag);
+    if (legacyHobby && hobbyPageTag && !hasTag(tags, hobbyPageTag)) tags.push(hobbyPageTag);
     const isResearch = legacyResearch || hasTag(tags, researchPageTag);
-    const isHobby = Boolean(hobbyPageTag && hasTag(tags, hobbyPageTag));
+    const isHobby = legacyHobby || hasTag(tags, hobbyPageTag);
     return {
       id: task.id || createId(),
       title: String(task.title || "").trim(),
