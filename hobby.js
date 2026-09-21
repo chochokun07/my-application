@@ -25,6 +25,8 @@
     concepts: "my-application.hobby.concepts.v0.1",
     identity: "my-application.hobby.identity.v0.1",
     selectedProject: "my-application.hobby.selected-project.v0.1",
+    chapterPanelCollapsed: "my-application.hobby.chapter-panel-collapsed.v0.1",
+    conceptPreviewCollapsed: "my-application.hobby.concept-preview-collapsed.v0.1",
   };
   const IDENTITY_PROJECT_ID = "7e4a9ec1-6df4-4c35-b1f8-1e0ec52b4d61";
   const PROJECT_STATUS_LABELS = { active: "進行中", completed: "完了済み" };
@@ -99,6 +101,8 @@
     selectedTargetId: "red-mist",
     selectedSectionId: "identity",
     activeTab: "concept",
+    chapterPanelCollapsed: localStorage.getItem(LOCAL_KEYS.chapterPanelCollapsed) === "true",
+    conceptPreviewCollapsed: localStorage.getItem(LOCAL_KEYS.conceptPreviewCollapsed) === "true",
     settingsOpen: false,
     settingsSection: "project",
     draggedProjectId: "",
@@ -891,10 +895,39 @@
     $("hobbyCharsPerMinute").value = String(project.charsPerMinute);
   }
 
+  function renderPanelCollapseState() {
+    const layout = document.querySelector(".hobby-script-layout");
+    const chapterPanel = $("hobbyChapterPanel");
+    const conceptPreview = $("hobbyConceptPreview");
+    if (!layout || !chapterPanel || !conceptPreview) return;
+
+    layout.classList.toggle("is-chapter-collapsed", state.chapterPanelCollapsed);
+    layout.classList.toggle("is-concept-collapsed", state.conceptPreviewCollapsed);
+    chapterPanel.classList.toggle("is-collapsed", state.chapterPanelCollapsed);
+    conceptPreview.classList.toggle("is-collapsed", state.conceptPreviewCollapsed);
+
+    const chapterToggle = chapterPanel.querySelector('[data-hobby-action="toggle-chapter-panel"]');
+    if (chapterToggle) {
+      chapterToggle.textContent = state.chapterPanelCollapsed ? "＋" : "−";
+      chapterToggle.setAttribute("aria-expanded", String(!state.chapterPanelCollapsed));
+      chapterToggle.setAttribute("aria-label", state.chapterPanelCollapsed ? "チャプター欄を展開する" : "チャプター欄を折り畳む");
+      chapterToggle.title = state.chapterPanelCollapsed ? "チャプター欄を展開する" : "チャプター欄を折り畳む";
+    }
+
+    const conceptToggle = conceptPreview.querySelector('[data-hobby-action="toggle-concept-preview"]');
+    if (conceptToggle) {
+      conceptToggle.textContent = state.conceptPreviewCollapsed ? "＋" : "−";
+      conceptToggle.setAttribute("aria-expanded", String(!state.conceptPreviewCollapsed));
+      conceptToggle.setAttribute("aria-label", state.conceptPreviewCollapsed ? "構想プレビューを展開する" : "構想プレビューを折り畳む");
+      conceptToggle.title = state.conceptPreviewCollapsed ? "構想プレビューを展開する" : "構想プレビューを折り畳む";
+    }
+  }
+
   function renderWorkspace() {
     const project = getProject();
     $("hobbyWorkspace").hidden = !project;
     $("hobbyProjectActions").hidden = !project;
+    renderPanelCollapseState();
     renderConceptPreview();
     if (!project) return;
     $("hobbyProjectTitle").textContent = project.name;
@@ -1272,6 +1305,16 @@
       localStorage.setItem(LOCAL_KEYS.selectedProject, state.selectedProjectId);
       render();
     } else if (action === "add-project") createProject();
+    else if (action === "toggle-chapter-panel") {
+      state.chapterPanelCollapsed = !state.chapterPanelCollapsed;
+      localStorage.setItem(LOCAL_KEYS.chapterPanelCollapsed, String(state.chapterPanelCollapsed));
+      renderPanelCollapseState();
+    }
+    else if (action === "toggle-concept-preview") {
+      state.conceptPreviewCollapsed = !state.conceptPreviewCollapsed;
+      localStorage.setItem(LOCAL_KEYS.conceptPreviewCollapsed, String(state.conceptPreviewCollapsed));
+      renderPanelCollapseState();
+    }
     else if (action === "toggle-project-status") {
       const project = getProject();
       if (project) {

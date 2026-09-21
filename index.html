@@ -501,21 +501,24 @@
 
             <div id="hobbyScriptPane" class="hobby-pane" role="tabpanel" hidden>
               <div class="hobby-script-layout">
-                <aside class="hobby-chapter-panel" aria-label="チャプター">
+                <aside id="hobbyChapterPanel" class="hobby-chapter-panel" aria-label="チャプター">
                   <div class="hobby-subpanel-heading">
                     <div>
                       <p class="hobby-pane-kicker">CHAPTERS</p>
                       <h3>チャプター</h3>
                     </div>
                     <button class="icon-button" type="button" data-hobby-action="add-chapter" aria-label="チャプターを追加">＋</button>
+                    <button class="icon-button hobby-panel-toggle" type="button" data-hobby-action="toggle-chapter-panel" aria-expanded="true" aria-controls="hobbyChapterPanelBody" aria-label="チャプター欄を折り畳む" title="チャプター欄を折り畳む">−</button>
                   </div>
-                  <div id="hobbyChapterList" class="hobby-chapter-list"></div>
-                  <div id="hobbyChapterEmpty" class="hobby-empty-state hobby-empty-state-compact" hidden>
-                    <span>チャプターを追加してください。</span>
-                  </div>
-                  <div class="hobby-chapter-actions">
-                    <button class="text-button" type="button" data-hobby-action="edit-chapter">名称変更</button>
-                    <button class="hobby-danger-button" type="button" data-hobby-action="delete-chapter">削除</button>
+                  <div id="hobbyChapterPanelBody" class="hobby-panel-body">
+                    <div id="hobbyChapterList" class="hobby-chapter-list"></div>
+                    <div id="hobbyChapterEmpty" class="hobby-empty-state hobby-empty-state-compact" hidden>
+                      <span>チャプターを追加してください。</span>
+                    </div>
+                    <div class="hobby-chapter-actions">
+                      <button class="text-button" type="button" data-hobby-action="edit-chapter">名称変更</button>
+                      <button class="hobby-danger-button" type="button" data-hobby-action="delete-chapter">削除</button>
+                    </div>
                   </div>
                 </aside>
 
@@ -558,6 +561,7 @@
                       <h3 id="hobbyConceptPreviewTitle">構想</h3>
                     </div>
                     <button class="text-button" type="button" data-hobby-action="edit-concept">編集</button>
+                    <button class="icon-button hobby-panel-toggle" type="button" data-hobby-action="toggle-concept-preview" aria-expanded="true" aria-controls="hobbyConceptPreviewBody" aria-label="構想プレビューを折り畳む" title="構想プレビューを折り畳む">−</button>
                   </div>
                   <div id="hobbyConceptPreviewBody" class="hobby-markdown-preview"></div>
                 </aside>
@@ -1520,7 +1524,7 @@
     <script src="./config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./hobby.js" defer></script>
-    <script src="./app.js?v=1.0.11" defer></script>
+    <script src="./app.js?v=1.0.12" defer></script>
     <script src="./research-bridge.js" defer></script>
   </body>
 </html>
