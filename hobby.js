@@ -885,7 +885,7 @@
       return '<article class="hobby-dialogue-line" data-line-id="' + escapeHtml(line.id) + '">' +
         '<div class="hobby-line-toolbar"><span class="hobby-line-number">' + (index + 1) + "</span><select data-script-action=\"speaker\">" + options + "</select>" +
         '<button type="button" data-hobby-action="move-up" aria-label="上へ">↑</button><button type="button" data-hobby-action="move-down" aria-label="下へ">↓</button><button type="button" data-hobby-action="delete-line" aria-label="削除">削除</button></div>' +
-        '<textarea rows="3" data-script-action="body" placeholder="セリフ本文">' + escapeHtml(line.body) + "</textarea></article>" + insertButton(index + 1);
+        '<textarea rows="3" data-script-action="body" placeholder="セリフ本文" title="Ctrl + Enterで次のセリフへ移動（末尾では新設）">' + escapeHtml(line.body) + "</textarea></article>" + insertButton(index + 1);
     }).join("");
     $("hobbyLineList").innerHTML = html;
     $("hobbyLineEmpty").hidden = lines.length !== 0;
@@ -1374,6 +1374,38 @@
     }
   }
 
+  async function handleScriptKeydown(event) {
+    const target = event.target;
+    if (event.key !== "Enter" || !event.ctrlKey || target?.dataset.scriptAction !== "body") return;
+    event.preventDefault();
+    if (event.repeat || target.dataset.advancing === "true") return;
+
+    const lineId = target.closest("[data-line-id]")?.dataset.lineId;
+    const line = state.lines.find((item) => item.id === lineId);
+    if (!line) return;
+
+    target.dataset.advancing = "true";
+    try {
+      line.body = target.value;
+      await saveLine(line, false);
+
+      const lines = getLines(line.chapterId);
+      const index = lines.findIndex((item) => item.id === line.id);
+      const nextLine = lines[index + 1];
+      if (nextLine) {
+        const nextTextarea = Array.from(page().querySelectorAll('[data-script-action="body"]'))
+          .find((textarea) => textarea.closest("[data-line-id]")?.dataset.lineId === nextLine.id);
+        nextTextarea?.focus();
+      } else {
+        await addLineAt(line.chapterId, index + 1);
+      }
+    } catch (error) {
+      notify("次のセリフへの移動に失敗しました: " + error.message, true);
+    } finally {
+      target.dataset.advancing = "false";
+    }
+  }
+
   function handleBlur(event) {
     const target = event.target;
     if (target.dataset.identityField === "1") {
@@ -1383,6 +1415,7 @@
     if (target.dataset.scriptAction === "body") {
       const line = state.lines.find((item) => item.id === target.closest("[data-line-id]")?.dataset.lineId);
       if (!line) return;
+      if (line.body === target.value) return;
       line.body = target.value;
       saveLine(line, false).catch((error) => notify(error.message, true));
     }
@@ -1394,6 +1427,7 @@
     root.addEventListener("click", handleClick);
     root.addEventListener("change", handleChange);
     root.addEventListener("blur", handleBlur, true);
+    root.addEventListener("keydown", handleScriptKeydown);
     root.addEventListener("dragstart", handleDragStart);
     root.addEventListener("dragover", handleDragOver);
     root.addEventListener("drop", handleDrop);
