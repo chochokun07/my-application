@@ -3054,6 +3054,10 @@ select:hover {
   gap: 10px;
 }
 
+.hobby-script-heading-actions {
+  flex-wrap: wrap;
+}
+
 .hobby-panel-heading,
 .hobby-subpanel-heading,
 .hobby-script-heading,

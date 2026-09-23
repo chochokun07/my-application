@@ -1184,23 +1184,119 @@
   }
 
 
-  function exportScript() {
-    const project = getProject();
-    if (!project) return;
+  function safeExportName(value) {
+    return String(value || "").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").trim() || "無題";
+  }
+
+  function scriptText(project, chapter) {
     const rows = [];
-    getChapters(project.id).forEach((chapter) => {
-      rows.push("【" + chapter.name + "】");
-      getLines(chapter.id).forEach((line) => {
+    const chapters = chapter ? [chapter] : getChapters(project.id);
+    chapters.forEach((item) => {
+      rows.push("【" + item.name + "】");
+      getLines(item.id).forEach((line) => {
         rows.push(project.outputTemplate.replaceAll("{speaker}", line.speaker || "").replaceAll("{body}", line.body || ""));
       });
       rows.push("");
     });
-    const blob = new Blob([rows.join("\n")], { type: "text/plain;charset=utf-8" });
+    return rows.join("\n");
+  }
+
+  function downloadExport(blob, filename) {
     const anchor = document.createElement("a");
     anchor.href = URL.createObjectURL(blob);
-    anchor.download = project.name.replace(/[\\/:*?"<>|]/g, "_") + ".txt";
+    anchor.download = filename;
     anchor.click();
-    URL.revokeObjectURL(anchor.href);
+    window.setTimeout(() => URL.revokeObjectURL(anchor.href), 60000);
+  }
+
+  function exportScript() {
+    const project = getProject();
+    if (!project) return;
+    downloadExport(new Blob([scriptText(project)], { type: "text/plain;charset=utf-8" }), safeExportName(project.name) + ".txt");
+  }
+
+  function zipArchive(files) {
+    const encoder = new TextEncoder();
+    const chunks = [];
+    const directory = [];
+    let offset = 0;
+    let directorySize = 0;
+    if (files.length > 65535) throw new Error("ZIPに含めるファイル数が多すぎます");
+    const crc32 = (data) => {
+      let crc = 0xffffffff;
+      for (const byte of data) {
+        crc ^= byte;
+        for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+      }
+      return (crc ^ 0xffffffff) >>> 0;
+    };
+    files.forEach(({ name, content }) => {
+      const filename = encoder.encode(name);
+      const data = encoder.encode(content);
+      if (filename.length > 65535 || data.length > 0xffffffff || offset + 30 + filename.length + data.length > 0xffffffff) {
+        throw new Error("ZIPのサイズ上限を超えました");
+      }
+      const checksum = crc32(data);
+      const local = new Uint8Array(30 + filename.length);
+      const localView = new DataView(local.buffer);
+      localView.setUint32(0, 0x04034b50, true);
+      localView.setUint16(4, 20, true);
+      localView.setUint16(6, 0x0800, true); // UTF-8 filenames
+      localView.setUint16(8, 0, true); // stored, no compression
+      localView.setUint16(12, 0x0021, true); // 1980-01-01
+      localView.setUint32(14, checksum, true);
+      localView.setUint32(18, data.length, true);
+      localView.setUint32(22, data.length, true);
+      localView.setUint16(26, filename.length, true);
+      local.set(filename, 30);
+      chunks.push(local, data);
+
+      const central = new Uint8Array(46 + filename.length);
+      const centralView = new DataView(central.buffer);
+      centralView.setUint32(0, 0x02014b50, true);
+      centralView.setUint16(4, 20, true);
+      centralView.setUint16(6, 20, true);
+      centralView.setUint16(8, 0x0800, true);
+      centralView.setUint16(12, 0, true);
+      centralView.setUint16(16, 0x0021, true);
+      centralView.setUint32(18, checksum, true);
+      centralView.setUint32(22, data.length, true);
+      centralView.setUint32(26, data.length, true);
+      centralView.setUint16(28, filename.length, true);
+      centralView.setUint32(42, offset, true);
+      central.set(filename, 46);
+      directory.push(central);
+      directorySize += central.length;
+      offset += local.length + data.length;
+    });
+    if (offset + directorySize > 0xffffffff) throw new Error("ZIPのサイズ上限を超えました");
+    const end = new Uint8Array(22);
+    const endView = new DataView(end.buffer);
+    endView.setUint32(0, 0x06054b50, true);
+    endView.setUint16(8, files.length, true);
+    endView.setUint16(10, files.length, true);
+    endView.setUint32(12, directorySize, true);
+    endView.setUint32(16, offset, true);
+    return new Blob([...chunks, ...directory, end], { type: "application/zip" });
+  }
+
+  function exportScriptZip() {
+    const project = getProject();
+    if (!project) return;
+    const chapters = getChapters(project.id);
+    if (!chapters.length) { notify("チャプターがありません", true); return; }
+    const name = safeExportName(project.name);
+    const width = String(chapters.length).length;
+    const files = chapters.map((chapter, index) => ({
+      name: String(index + 1).padStart(width, "0") + "_" + safeExportName(chapter.name) + ".txt",
+      content: scriptText(project, chapter),
+    }));
+    files.push({ name: name + "_全編.txt", content: scriptText(project) });
+    try {
+      downloadExport(zipArchive(files), name + "_台本.zip");
+    } catch (error) {
+      notify("ZIP書き出しに失敗しました: " + error.message, true);
+    }
   }
 
   async function saveProjectOrder() {
@@ -1351,6 +1447,7 @@
     else if (action === "edit-concept") { state.activeTab = "concept"; renderWorkspace(); }
     else if (action === "save-concept") editConcept().catch((error) => notify(error.message, true));
     else if (action === "export-script") exportScript();
+    else if (action === "export-script-zip") exportScriptZip();
   }
 
   function handleChange(event) {
