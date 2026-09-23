@@ -1,4 +1,4 @@
-const CACHE_NAME = "my-application-v0.4.13";
+const CACHE_NAME = "my-application-v0.4.14";
 const APP_SHELL = [
   "./",
   "./index.html",

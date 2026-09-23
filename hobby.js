@@ -885,7 +885,7 @@
       return '<article class="hobby-dialogue-line" data-line-id="' + escapeHtml(line.id) + '">' +
         '<div class="hobby-line-toolbar"><span class="hobby-line-number">' + (index + 1) + "</span><select data-script-action=\"speaker\">" + options + "</select>" +
         '<button type="button" data-hobby-action="move-up" aria-label="上へ">↑</button><button type="button" data-hobby-action="move-down" aria-label="下へ">↓</button><button type="button" data-hobby-action="delete-line" aria-label="削除">削除</button></div>' +
-        '<textarea rows="3" data-script-action="body" placeholder="セリフ本文" title="Ctrl + Enterで次のセリフへ移動（末尾では新設）">' + escapeHtml(line.body) + "</textarea></article>" + insertButton(index + 1);
+        '<textarea rows="3" data-script-action="body" placeholder="セリフ本文" title="Ctrl + Enter：次のセリフへ移動 / Ctrl + Shift + Enter：カーソル以降を新しいセリフへ分割">' + escapeHtml(line.body) + "</textarea></article>" + insertButton(index + 1);
     }).join("");
     $("hobbyLineList").innerHTML = html;
     $("hobbyLineEmpty").hidden = lines.length !== 0;
@@ -1251,22 +1251,31 @@
     document.querySelectorAll('[data-project-id][draggable="true"]').forEach((item) => item.classList.remove("is-dragging", "is-drag-over"));
   }
 
-  async function addLineAt(chapterId, insertIndex) {
+  async function addLineAt(chapterId, insertIndex, split = null) {
     const chapter = state.chapters.find((item) => item.id === chapterId);
     if (!chapter) return;
     const lines = getLines(chapterId);
     const index = Math.max(0, Math.min(Number(insertIndex) || 0, lines.length));
+    const originalBody = split?.sourceLine?.body;
     lines.forEach((line, lineIndex) => { if (lineIndex >= index) line.position += 1; });
-    const line = normalizeLine({ id: createId(), chapterId, position: index + 1, speaker: state.speakers[0]?.name || "", body: "" });
+    if (split) split.sourceLine.body = split.sourceBody;
+    const line = normalizeLine({ id: createId(), chapterId, position: index + 1, speaker: split ? split.speaker : state.speakers[0]?.name || "", body: split ? split.body : "" });
     state.lines.push(line);
     try {
       if (isRemote()) {
         const result = await remoteClient.from(TABLES.lines).upsert(getLines(chapterId).map((current) => ({ id: current.id, user_id: state.user.id, chapter_id: current.chapterId, position: current.position, speaker: current.speaker, body: current.body })), { onConflict: "id" });
         if (result.error) throw result.error;
       }
-      writeLocal(); render();
+      writeLocal();
+      if (split) split.sourceTextarea.value = split.sourceBody;
+      render();
       window.setTimeout(() => document.querySelector('[data-line-id="' + line.id + '"] textarea')?.focus(), 30);
-    } catch (error) { notify("セリフの追加に失敗しました: " + error.message, true); }
+    } catch (error) {
+      state.lines = state.lines.filter((item) => item.id !== line.id);
+      lines.forEach((item, lineIndex) => { if (lineIndex >= index) item.position -= 1; });
+      if (split) split.sourceLine.body = originalBody;
+      notify("セリフの追加に失敗しました: " + error.message, true);
+    }
   }
 
   async function removeSpeaker(speakerId) {
@@ -1376,7 +1385,7 @@
 
   async function handleScriptKeydown(event) {
     const target = event.target;
-    if (event.key !== "Enter" || !event.ctrlKey || target?.dataset.scriptAction !== "body") return;
+    if (event.key !== "Enter" || !event.ctrlKey || event.isComposing || target?.dataset.scriptAction !== "body") return;
     event.preventDefault();
     if (event.repeat || target.dataset.advancing === "true") return;
 
@@ -1386,6 +1395,18 @@
 
     target.dataset.advancing = "true";
     try {
+      if (event.shiftKey) {
+        const index = getLines(line.chapterId).findIndex((item) => item.id === line.id);
+        const splitAt = target.selectionStart;
+        await addLineAt(line.chapterId, index + 1, {
+          sourceLine: line,
+          sourceBody: target.value.slice(0, splitAt),
+          sourceTextarea: target,
+          speaker: line.speaker,
+          body: target.value.slice(splitAt),
+        });
+        return;
+      }
       line.body = target.value;
       await saveLine(line, false);
 
