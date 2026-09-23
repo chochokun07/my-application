@@ -1188,11 +1188,11 @@
     return String(value || "").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").trim() || "無題";
   }
 
-  function scriptText(project, chapter) {
+  function scriptText(project, chapter, includeChapterName = true) {
     const rows = [];
     const chapters = Array.isArray(chapter) ? chapter : chapter ? [chapter] : getChapters(project.id);
     chapters.forEach((item) => {
-      rows.push("【" + item.name + "】");
+      if (includeChapterName) rows.push("【" + item.name + "】");
       getLines(item.id).forEach((line) => {
         rows.push(project.outputTemplate.replaceAll("{speaker}", line.speaker || "").replaceAll("{body}", line.body || ""));
       });
@@ -1275,7 +1275,7 @@
     const width = String(all.length).length;
     chapters.forEach((chapter) => {
       const filename = String(all.indexOf(chapter) + 1).padStart(width, "0") + "_" + safeExportName(chapter.name) + ".txt";
-      downloadExport(new Blob([scriptText(project, chapter)], { type: "text/plain;charset=utf-8" }), filename);
+      downloadExport(new Blob([scriptText(project, chapter, false)], { type: "text/plain;charset=utf-8" }), filename);
     });
     closeExportPicker();
   }
@@ -1354,7 +1354,7 @@
     const width = String(all.length).length;
     const files = chapters.map((chapter) => ({
       name: String(all.indexOf(chapter) + 1).padStart(width, "0") + "_" + safeExportName(chapter.name) + ".txt",
-      content: scriptText(project, chapter),
+      content: scriptText(project, chapter, false),
     }));
     files.push({ name: name + "_全編.txt", content: scriptText(project, chapters) });
     try {
