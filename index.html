@@ -529,8 +529,7 @@
                       <h3 id="hobbyCurrentChapterName"></h3>
                     </div>
                     <div class="hobby-script-heading-actions">
-                      <button class="secondary-button" type="button" data-hobby-action="export-script">統合TXT</button>
-                      <button class="secondary-button" type="button" data-hobby-action="export-script-zip">全パートZIP</button>
+                      <button class="secondary-button" type="button" data-hobby-action="export-script">書き出し</button>
                       <button class="primary-button" type="button" data-hobby-action="add-line">＋ セリフ</button>
                     </div>
                   </div>
@@ -586,6 +585,30 @@
             <button class="text-button" type="button" data-activity-task-add="hobby">趣味タスクを追加</button>
           </div>
         </section>
+        <div id="hobbyExportModal" class="modal-backdrop hobby-export-backdrop" hidden>
+          <div class="hobby-export-overlay" data-hobby-action="close-export"></div>
+          <section class="hobby-export-dialog" role="dialog" aria-modal="true" aria-labelledby="hobbyExportTitle">
+            <header class="hobby-settings-header">
+              <div>
+                <p class="hobby-pane-kicker">SCRIPT EXPORT</p>
+                <h2 id="hobbyExportTitle">台本の書き出し</h2>
+              </div>
+              <button class="icon-button" type="button" data-hobby-action="close-export" aria-label="閉じる">×</button>
+            </header>
+            <p id="hobbyExportProjectName" class="hobby-export-project"></p>
+            <div class="hobby-export-select-heading">
+              <span id="hobbyExportSelectionCount"></span>
+              <button id="hobbyExportSelectAll" class="text-button" type="button" data-hobby-action="toggle-export-selection">全選択</button>
+            </div>
+            <div id="hobbyExportChapterList" class="hobby-export-list" aria-label="書き出すパート"></div>
+            <p class="hobby-help-text">TXTは選択したパートを個別に書き出します。ZIPには個別TXTと選択分の統合TXTを含めます。</p>
+            <div class="hobby-export-actions">
+              <button class="secondary-button" type="button" data-hobby-action="close-export">キャンセル</button>
+              <button id="hobbyExportTxt" class="secondary-button" type="button" data-hobby-action="export-selected-txt">個別TXT</button>
+              <button id="hobbyExportZip" class="primary-button" type="button" data-hobby-action="export-script-zip">ZIP</button>
+            </div>
+          </section>
+        </div>
         <div id="hobbySettingsMenu" class="hobby-settings-menu" hidden>
           <div class="hobby-settings-backdrop" data-hobby-action="close-settings"></div>
           <section class="hobby-settings-panel" role="dialog" aria-modal="true" aria-labelledby="hobbySettingsTitle">

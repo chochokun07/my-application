@@ -1190,7 +1190,7 @@
 
   function scriptText(project, chapter) {
     const rows = [];
-    const chapters = chapter ? [chapter] : getChapters(project.id);
+    const chapters = Array.isArray(chapter) ? chapter : chapter ? [chapter] : getChapters(project.id);
     chapters.forEach((item) => {
       rows.push("【" + item.name + "】");
       getLines(item.id).forEach((line) => {
@@ -1209,10 +1209,75 @@
     window.setTimeout(() => URL.revokeObjectURL(anchor.href), 60000);
   }
 
-  function exportScript() {
+  function openExportPicker() {
     const project = getProject();
     if (!project) return;
-    downloadExport(new Blob([scriptText(project)], { type: "text/plain;charset=utf-8" }), safeExportName(project.name) + ".txt");
+    const chapters = getChapters(project.id);
+    if (!chapters.length) { notify("チャプターがありません", true); return; }
+    const modal = $("hobbyExportModal");
+    const list = $("hobbyExportChapterList");
+    if (!modal || !list) return;
+    modal.dataset.projectId = project.id;
+    $("hobbyExportProjectName").textContent = project.name;
+    list.replaceChildren();
+    chapters.forEach((chapter) => {
+      const label = document.createElement("label");
+      label.className = "hobby-export-chapter";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = chapter.id;
+      checkbox.checked = chapter.id === state.selectedChapterId;
+      checkbox.addEventListener("change", updateExportPicker);
+      const name = document.createElement("span");
+      name.textContent = chapter.name;
+      label.append(checkbox, name);
+      list.append(label);
+    });
+    if (!list.querySelector("input:checked")) list.querySelector("input").checked = true;
+    modal.hidden = false;
+    updateExportPicker();
+    list.querySelector("input:checked")?.focus();
+  }
+
+  function closeExportPicker() {
+    $("hobbyExportModal").hidden = true;
+    document.querySelector('[data-hobby-action="export-script"]')?.focus();
+  }
+
+  function selectedExportChapters() {
+    const project = getProject();
+    if (!project || $("hobbyExportModal").dataset.projectId !== project.id) return [];
+    const checked = new Set([...$("hobbyExportChapterList").querySelectorAll("input:checked")].map((input) => input.value));
+    return getChapters(project.id).filter((chapter) => checked.has(chapter.id));
+  }
+
+  function updateExportPicker() {
+    const checkboxes = [...$("hobbyExportChapterList").querySelectorAll("input")];
+    const selected = checkboxes.filter((input) => input.checked).length;
+    $("hobbyExportSelectionCount").textContent = selected + " / " + checkboxes.length + " パート選択中";
+    $("hobbyExportSelectAll").textContent = selected === checkboxes.length ? "選択解除" : "全選択";
+    $("hobbyExportTxt").disabled = !selected;
+    $("hobbyExportZip").disabled = !selected;
+  }
+
+  function toggleExportSelection() {
+    const checkboxes = [...$("hobbyExportChapterList").querySelectorAll("input")];
+    const selectAll = checkboxes.some((input) => !input.checked);
+    checkboxes.forEach((input) => { input.checked = selectAll; });
+    updateExportPicker();
+  }
+
+  function exportSelectedTxt() {
+    const project = getProject();
+    const chapters = selectedExportChapters();
+    if (!project || !chapters.length) return;
+    const all = getChapters(project.id);
+    const width = String(all.length).length;
+    chapters.forEach((chapter) => {
+      const filename = String(all.indexOf(chapter) + 1).padStart(width, "0") + "_" + safeExportName(chapter.name) + ".txt";
+      downloadExport(new Blob([scriptText(project, chapter)], { type: "text/plain;charset=utf-8" }), filename);
+    });
+    closeExportPicker();
   }
 
   function zipArchive(files) {
@@ -1282,18 +1347,19 @@
 
   function exportScriptZip() {
     const project = getProject();
-    if (!project) return;
-    const chapters = getChapters(project.id);
-    if (!chapters.length) { notify("チャプターがありません", true); return; }
+    const chapters = selectedExportChapters();
+    if (!project || !chapters.length) return;
+    const all = getChapters(project.id);
     const name = safeExportName(project.name);
-    const width = String(chapters.length).length;
-    const files = chapters.map((chapter, index) => ({
-      name: String(index + 1).padStart(width, "0") + "_" + safeExportName(chapter.name) + ".txt",
+    const width = String(all.length).length;
+    const files = chapters.map((chapter) => ({
+      name: String(all.indexOf(chapter) + 1).padStart(width, "0") + "_" + safeExportName(chapter.name) + ".txt",
       content: scriptText(project, chapter),
     }));
-    files.push({ name: name + "_全編.txt", content: scriptText(project) });
+    files.push({ name: name + "_全編.txt", content: scriptText(project, chapters) });
     try {
       downloadExport(zipArchive(files), name + "_台本.zip");
+      closeExportPicker();
     } catch (error) {
       notify("ZIP書き出しに失敗しました: " + error.message, true);
     }
@@ -1446,7 +1512,10 @@
     else if (action === "add-custom") addCustomField().catch((error) => notify(error.message, true));
     else if (action === "edit-concept") { state.activeTab = "concept"; renderWorkspace(); }
     else if (action === "save-concept") editConcept().catch((error) => notify(error.message, true));
-    else if (action === "export-script") exportScript();
+    else if (action === "export-script") openExportPicker();
+    else if (action === "close-export") closeExportPicker();
+    else if (action === "toggle-export-selection") toggleExportSelection();
+    else if (action === "export-selected-txt") exportSelectedTxt();
     else if (action === "export-script-zip") exportScriptZip();
   }
 
@@ -1556,7 +1625,8 @@
     });
     observer.observe(root, { attributes: true, attributeFilter: ["hidden"] });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && state.settingsOpen) closeSettings();
+      if (event.key === "Escape" && !$("hobbyExportModal")?.hidden) closeExportPicker();
+      else if (event.key === "Escape" && state.settingsOpen) closeSettings();
     });
     window.addEventListener("hashchange", () => {
       if (window.location.hash.replace("#", "").toLowerCase() === "hobby") render();
